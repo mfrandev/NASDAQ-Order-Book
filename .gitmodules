@@ -1,0 +1,3 @@
+[submodule "lib/lockfree_mpmc_queue"]
+	path = lib/lockfree_mpmc_queue
+	url = https://github.com/erez-strauss/lockfree_mpmc_queue

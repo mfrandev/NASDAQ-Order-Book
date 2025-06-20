@@ -21,7 +21,7 @@ struct OrderExecutedWithPrice : public Message {
         char printable;
         uint32_t executionPrice;
 
-        static MempoolSPSC<OrderExecutedWithPrice, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<OrderExecutedWithPrice, SPSC_QUEUE_CAPACITY + 2> _mempool;
 
     public:
         OrderExecutedWithPrice(BinaryMessageHeader header, uint64_t orderReferenceNumber, uint32_t executedShares, uint64_t matchNumber, char printable, uint32_t executionPrice) :
@@ -47,7 +47,7 @@ struct OrderExecutedWithPrice : public Message {
         }
 
         bool processMessage() const override { 
-            if(isAfterHours(header.getTimestamp())) return false;            
+            if(isAfterHours(header.getTimestamp())) return true;            
             VWAPManager::getInstance().handleOrderExecutedWithPrice(
                 header.getTimestamp(), 
                 header.getStockLocate(), 

@@ -4,7 +4,7 @@
 #include <string_utils.h>
 #include <endian_utils.h>
 
-MempoolSPSC<AddOrder, SPSC_QUEUE_CAPACITY + 2> AddOrder::_mempool;
+lockfree::MempoolSPSC<AddOrder, SPSC_QUEUE_CAPACITY + 2> AddOrder::_mempool;
 
 /** 
  * Parse the AddOrder message body

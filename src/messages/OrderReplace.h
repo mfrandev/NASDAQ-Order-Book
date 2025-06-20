@@ -17,7 +17,7 @@ class OrderReplace : public Message {
         uint64_t newOrderReferenceNumber;
         uint32_t shares;
         uint32_t price;
-        static MempoolSPSC<OrderReplace, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<OrderReplace, SPSC_QUEUE_CAPACITY + 2> _mempool;
 
 
     public:

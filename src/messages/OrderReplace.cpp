@@ -2,7 +2,7 @@
 
 #include <endian_utils.h>
 
-MempoolSPSC<OrderReplace, SPSC_QUEUE_CAPACITY + 2> OrderReplace::_mempool;
+lockfree::MempoolSPSC<OrderReplace, SPSC_QUEUE_CAPACITY + 2> OrderReplace::_mempool;
 
 /**
  * Parse the OrderReplace body

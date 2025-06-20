@@ -4,7 +4,7 @@
 #include <string_utils.h>
 #include <endian_utils.h>
 
-MempoolSPSC<CrossTrade, SPSC_QUEUE_CAPACITY + 2> CrossTrade::_mempool;
+lockfree::MempoolSPSC<CrossTrade, SPSC_QUEUE_CAPACITY + 2> CrossTrade::_mempool;
 
 /**
  * Parse the cross trade body from the binary buffer

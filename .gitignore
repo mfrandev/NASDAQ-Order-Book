@@ -1,11 +1,12 @@
 **/build
 **/docs
-**/lib
+# **/lib
 **/heaptrack*
 *.NASDAQ_ITCH50
 
 **/.vscode/
 **/.DS_Store
+stats*
 **/*Output
 !LiveOutput/
 !SampleOutput*/

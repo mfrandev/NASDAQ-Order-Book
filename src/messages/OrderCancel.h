@@ -14,7 +14,7 @@ class OrderCancel : public Message {
         uint64_t orderReferenceNumber;
         uint32_t cancelledShares;
 
-        static MempoolSPSC<OrderCancel, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<OrderCancel, SPSC_QUEUE_CAPACITY + 2> _mempool;
 
     public: 
         OrderCancel(BinaryMessageHeader header, uint64_t orderReferenceNumber, uint32_t cancelledShares) :

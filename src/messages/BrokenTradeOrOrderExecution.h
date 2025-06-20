@@ -13,7 +13,7 @@
 class BrokenTradeOrOrderExecution : public Message {
     private:
         uint64_t matchNumber;
-        static MempoolSPSC<BrokenTradeOrOrderExecution, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<BrokenTradeOrOrderExecution, SPSC_QUEUE_CAPACITY + 2> _mempool;
     public:
         BrokenTradeOrOrderExecution(BinaryMessageHeader header, uint64_t matchNumber) :
         Message(std::move(header)),

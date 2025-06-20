@@ -24,7 +24,7 @@ class AddOrderMPID : public Message {
         uint32_t price;
         std::string attribution;
 
-        static MempoolSPSC<AddOrderMPID, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<AddOrderMPID, SPSC_QUEUE_CAPACITY + 2> _mempool;
     
     public:
         /**

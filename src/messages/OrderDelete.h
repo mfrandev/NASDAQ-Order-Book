@@ -15,7 +15,7 @@ class OrderDelete : public Message {
     private: 
         uint64_t orderReferenceNumber;
 
-        static MempoolSPSC<OrderDelete, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<OrderDelete, SPSC_QUEUE_CAPACITY + 2> _mempool;
     
     public:
         OrderDelete(BinaryMessageHeader header, uint64_t orderReferenceNumber) :

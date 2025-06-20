@@ -23,7 +23,7 @@ class AddOrder : public Message {
         std::string stock;
         uint32_t price;
 
-        static MempoolSPSC<AddOrder, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<AddOrder, SPSC_QUEUE_CAPACITY + 2> _mempool;
     
     public:
         /**

@@ -2,7 +2,7 @@
 
 #include <endian_utils.h>
 
-MempoolSPSC<BrokenTradeOrOrderExecution, SPSC_QUEUE_CAPACITY + 2> BrokenTradeOrOrderExecution::_mempool;
+lockfree::MempoolSPSC<BrokenTradeOrOrderExecution, SPSC_QUEUE_CAPACITY + 2> BrokenTradeOrOrderExecution::_mempool;
 
 /**
  * Parse the BrokenTradeOrOrderExecution body

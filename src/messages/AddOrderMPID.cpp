@@ -7,7 +7,7 @@
 #include <string_utils.h>
 #include <endian_utils.h>
 
-MempoolSPSC<AddOrderMPID, SPSC_QUEUE_CAPACITY + 2> AddOrderMPID::_mempool;
+lockfree::MempoolSPSC<AddOrderMPID, SPSC_QUEUE_CAPACITY + 2> AddOrderMPID::_mempool;
 
 /** 
  * Parse the AddOrderMPID message body

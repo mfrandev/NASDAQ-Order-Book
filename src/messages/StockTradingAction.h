@@ -29,7 +29,7 @@ class StockTradingAction : public Message {
         char reserved;
         std::string reason;
 
-        static MempoolSPSC<StockTradingAction, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<StockTradingAction, SPSC_QUEUE_CAPACITY + 2> _mempool;
 
     public:
 

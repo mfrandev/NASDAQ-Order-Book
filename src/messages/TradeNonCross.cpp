@@ -5,7 +5,7 @@
 #include <endian_utils.h>
 #include <string_utils.h>
 
-MempoolSPSC<TradeNonCross, SPSC_QUEUE_CAPACITY + 2> TradeNonCross::_mempool;
+lockfree::MempoolSPSC<TradeNonCross, SPSC_QUEUE_CAPACITY + 2> TradeNonCross::_mempool;
 
 /**
  * Parse the Trade Non-Cross body from the binary message

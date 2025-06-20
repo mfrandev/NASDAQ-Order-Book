@@ -2,7 +2,7 @@
 
 #include <endian_utils.h>
 
-MempoolSPSC<OrderExecuted, SPSC_QUEUE_CAPACITY + 2> OrderExecuted::_mempool;
+lockfree::MempoolSPSC<OrderExecuted, SPSC_QUEUE_CAPACITY + 2> OrderExecuted::_mempool;
 
 OrderExecuted* parseOrderExecutedBody(BinaryMessageHeader header, const char* data) {
     size_t offset = 0;

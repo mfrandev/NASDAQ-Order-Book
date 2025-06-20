@@ -18,7 +18,7 @@ class OrderExecuted : public Message {
         uint32_t executedShares;
         uint64_t matchNumber;
 
-        static MempoolSPSC<OrderExecuted, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<OrderExecuted, SPSC_QUEUE_CAPACITY + 2> _mempool;
 
     public:
         OrderExecuted(BinaryMessageHeader header, uint64_t orderReferenceNumber, uint32_t executedShares, uint64_t matchNumber) :
@@ -42,7 +42,7 @@ class OrderExecuted : public Message {
         }
 
         bool processMessage() const override { 
-            if(isAfterHours(header.getTimestamp())) return false;
+            if(isAfterHours(header.getTimestamp())) return true;
                 VWAPManager::getInstance().handleOrderExecuted(
                 header.getTimestamp(), 
                 header.getStockLocate(), 

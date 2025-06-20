@@ -20,7 +20,7 @@ class CrossTrade : public Message {
         uint64_t matchNumber;
         char crossType;
 
-        static MempoolSPSC<CrossTrade, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<CrossTrade, SPSC_QUEUE_CAPACITY + 2> _mempool;
 
     public:
         /**
@@ -36,7 +36,7 @@ class CrossTrade : public Message {
         {}
 
         bool processMessage() const override {
-            if(isAfterHours(header.getTimestamp())) return false;
+            if(isAfterHours(header.getTimestamp())) return true;
             VWAPManager::getInstance().handleCrossTrade(header.getTimestamp(), header.getStockLocate(), crossPrice, shares, matchNumber);
             return true;
         }

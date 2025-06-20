@@ -2,7 +2,7 @@
 
 #include <endian_utils.h>
 
-MempoolSPSC<OrderCancel, SPSC_QUEUE_CAPACITY + 2> OrderCancel::_mempool;
+lockfree::MempoolSPSC<OrderCancel, SPSC_QUEUE_CAPACITY + 2> OrderCancel::_mempool;
 
 /**
  * Parse the OrderCancel body

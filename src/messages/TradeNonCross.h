@@ -24,7 +24,7 @@ class TradeNonCross : public Message {
         uint32_t price;
         uint64_t matchNumber;
 
-        static MempoolSPSC<TradeNonCross, SPSC_QUEUE_CAPACITY + 2> _mempool;
+        static lockfree::MempoolSPSC<TradeNonCross, SPSC_QUEUE_CAPACITY + 2> _mempool;
 
     public:
 
@@ -55,7 +55,7 @@ class TradeNonCross : public Message {
         }
 
         bool processMessage() const override {
-            if(isAfterHours(header.getTimestamp())) return false;
+            if(isAfterHours(header.getTimestamp())) return true;
             VWAPManager::getInstance().handleTrade(
                 header.getTimestamp(), 
                 header.getStockLocate(), 

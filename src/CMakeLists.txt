@@ -18,6 +18,8 @@ find_package(Boost REQUIRED)
 
 include_directories(
     "."
+    "../lib/CLI11"
+    "../lib/lockfree_mpmc_queue"
     "./bookkeeping" 
     "./messages"
     "./utils"
@@ -27,6 +29,8 @@ include_directories(
 
 file(GLOB SOURCES
   "main.cpp"
+  "../lib/CLI11/*.hpp"
+  "../lib/lockfree_mpmc_queue/*.h"
   "./bookkeeping/*.cpp"
   "./messages/*.cpp"
   "./utils/*.cpp"
@@ -36,3 +40,4 @@ file(GLOB SOURCES
 # The compiled library code is here
 add_executable(nasdaq_order_book ${SOURCES})
 target_link_libraries(nasdaq_order_book fmt::fmt)
+target_compile_options(nasdaq_order_book PRIVATE -march=native) # for __sync_val_compare_and_swap
