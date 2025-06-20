@@ -1,8 +1,8 @@
 #include <ProcessMessage.h>
 
+#include <spdlog/spdlog.h>
+
 #include <cassert>
-#include <optional>
-#include <fmt/format.h>
 
 #include <Message.h>
 #include <AddOrder.h>
@@ -21,6 +21,7 @@
 #include <time_utils.h>
 
 extern uint8_t currentPeriod;
+extern const std::string& CONSOLE_LOGGER;
 
 void ProcessMessage::processHeaderTimestamp(uint64_t timestamp) {
 
@@ -31,7 +32,7 @@ void ProcessMessage::processHeaderTimestamp(uint64_t timestamp) {
 
         // No need to continue keeping track of reporting period if market hours are done
         if (periodOfThisMessage < NUMBER_OF_PERIODS_PER_DAY) {
-            fmt::println("Timestamp: {} Moving from period {} to period {}", timestamp, currentPeriod, periodOfThisMessage);
+            spdlog::get(CONSOLE_LOGGER) -> info("Timestamp: {} Moving from period {} to period {}", timestamp, currentPeriod, periodOfThisMessage);
             currentPeriod = periodOfThisMessage;
         }
     }
@@ -45,72 +46,72 @@ Message* ProcessMessage::getMessage(const char *data, size_t bytesToRead, Binary
     case MESSAGE_TYPE_ADD_ORDER_NO_MPID:
     {
         return parseAddOrderBody(std::move(header), data);
-        // fmt::println("1. Adding: {},{},{},{},{}", addOrder.getOrderReferenceNumber(), addOrder.getBuySellIndicator(), addOrder.getShares(), addOrder.getStock(), addOrder.getPrice());
+        // spdlog::get(CONSOLE_LOGGER) -> info("1. Adding: {},{},{},{},{}", addOrder.getOrderReferenceNumber(), addOrder.getBuySellIndicator(), addOrder.getShares(), addOrder.getStock(), addOrder.getPrice());
     }
     break;
     case MESSAGE_TYPE_ADD_ORDER_WITH_MPID:
     {
         return parseAddOrderMPIDBody(std::move(header), data);
-        // fmt::println("2. Adding: {},{},{},{},{},{}", addOrderMPID.getOrderReferenceNumber(), addOrderMPID.getBuySellIndicator(), addOrderMPID.getShares(), addOrderMPID.getStock(), addOrderMPID.getPrice(), addOrderMPID.getAttribution());
+        // spdlog::get(CONSOLE_LOGGER) -> info("2. Adding: {},{},{},{},{},{}", addOrderMPID.getOrderReferenceNumber(), addOrderMPID.getBuySellIndicator(), addOrderMPID.getShares(), addOrderMPID.getStock(), addOrderMPID.getPrice(), addOrderMPID.getAttribution());
     }
     break;
     case MESSAGE_TYPE_TRADE_BROKEN:
     {
         return parseBrokenTradeOrOrderExecutionBody(std::move(header), data);
-        // fmt::println("broken trade!");
+        // spdlog::get(CONSOLE_LOGGER) -> info("broken trade!");
     }
     break;
     case MESSAGE_TYPE_TRADE_CROSS:
     {
         return parseCrossTradeBody(std::move(header), data);
-        // fmt::println("3. {},{},{},{},{}", crossTrade.getShares(), crossTrade.getStock(), crossTrade.getCrossPrice(), crossTrade.getMatchNumber(), crossTrade.getCrossType());
+        // spdlog::get(CONSOLE_LOGGER) -> info("3. {},{},{},{},{}", crossTrade.getShares(), crossTrade.getStock(), crossTrade.getCrossPrice(), crossTrade.getMatchNumber(), crossTrade.getCrossType());
     }
     break;
     case MESSAGE_TYPE_ORDER_CANCELLED:
     {
         return parseOrderCancelBody(std::move(header), data);
-        // fmt::println("4. {},{}",orderCancel.getOrderReferenceNumber(), orderCancel.getCancelledShares());
+        // spdlog::get(CONSOLE_LOGGER) -> info("4. {},{}",orderCancel.getOrderReferenceNumber(), orderCancel.getCancelledShares());
     }
     break;
     case MESSAGE_TYPE_ORDER_DELETE:
     {
         return parseOrderDeleteBody(std::move(header), data);
-        // fmt::println("5. Deleting: {}", orderDelete.getOrderReferenceNumber());
+        // spdlog::get(CONSOLE_LOGGER) -> info("5. Deleting: {}", orderDelete.getOrderReferenceNumber());
     }
     break;
     case MESSAGE_TYPE_ORDER_EXECUTED:
     {
         return parseOrderExecutedBody(std::move(header), data);
-        // fmt::println("6. {},{},{}", orderExecuted.getOrderReferenceNumber(), orderExecuted.getExecutedShares(), orderExecuted.getMatchNumber());
+        // spdlog::get(CONSOLE_LOGGER) -> info("6. {},{},{}", orderExecuted.getOrderReferenceNumber(), orderExecuted.getExecutedShares(), orderExecuted.getMatchNumber());
     }
     break;
     case MESSAGE_TYPE_ORDER_EXECUTED_WITH_PRICE:
     {
         return parseOrderExecutedWithPriceBody(std::move(header), data);
-        // fmt::println("7. {},{},{},{},{}", orderExecutedWithPrice.getOrderReferenceNumber(), orderExecutedWithPrice.getExecutedShares(), orderExecutedWithPrice.geMtatchNumber(), orderExecutedWithPrice.getPrintable(), orderExecutedWithPrice.getExecutionPrice());
+        // spdlog::get(CONSOLE_LOGGER) -> info("7. {},{},{},{},{}", orderExecutedWithPrice.getOrderReferenceNumber(), orderExecutedWithPrice.getExecutedShares(), orderExecutedWithPrice.geMtatchNumber(), orderExecutedWithPrice.getPrintable(), orderExecutedWithPrice.getExecutionPrice());
     }
     break;
     case MESSAGE_TYPE_ORDER_REPLACE:
     {
         return parseOrderReplaceBody(std::move(header), data);
-        // fmt::println("8. {},{},{},{}", orderReplace.getOriginalOrderReferenceNumber(), orderReplace.getNewOrderReferenceNumber(), orderReplace.getShares(), orderReplace.getPrice());
+        // spdlog::get(CONSOLE_LOGGER) -> info("8. {},{},{},{}", orderReplace.getOriginalOrderReferenceNumber(), orderReplace.getNewOrderReferenceNumber(), orderReplace.getShares(), orderReplace.getPrice());
     }
     break;
     case MESSAGE_TYPE_STOCK_TRADING_ACTION:
     {
         return parseStockTradingActionBody(std::move(header), data);
-        // fmt::println("9. StockLocate {}: {},{},{},{}", header.getStockLocate(), stockTradingAction->stock, stockTradingAction->tradingState, stockTradingAction->reserved, stockTradingAction->reason);
+        // spdlog::get(CONSOLE_LOGGER) -> info("9. StockLocate {}: {},{},{},{}", header.getStockLocate(), stockTradingAction->stock, stockTradingAction->tradingState, stockTradingAction->reserved, stockTradingAction->reason);
     }
     break;
     case MESSAGE_TYPE_SYSTEM_EVENT:
     {
         return parseSystemEventBody(std::move(header), data);
-        // fmt::println("{}",systemEvent -> eventCode);
+        // spdlog::get(CONSOLE_LOGGER) -> info("{}",systemEvent -> eventCode);
     }
     break;
     case MESSAGE_TYPE_TRADE_NON_CROSS:
     {
-        // fmt::println("10. {},{},{},{},{},{}", tradeNonCross.getOrderReferenceNumber(), tradeNonCross.getBuySellIndicator(), tradeNonCross.getShares(), tradeNonCross.geStock(), tradeNonCross.getPrice(), tradeNonCross.getMatchNumber());
+        // spdlog::get(CONSOLE_LOGGER) -> info("10. {},{},{},{},{},{}", tradeNonCross.getOrderReferenceNumber(), tradeNonCross.getBuySellIndicator(), tradeNonCross.getShares(), tradeNonCross.geStock(), tradeNonCross.getPrice(), tradeNonCross.getMatchNumber());
         return parseTradeNonCrossBody(std::move(header), data);
     }
     break;

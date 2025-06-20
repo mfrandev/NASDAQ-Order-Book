@@ -5,8 +5,6 @@
 
 #include <time_utils.h>
 
-#include <fmt/format.h>
-
 // Singleton declaration and getter
 OrderBook* OrderBook::_instance = nullptr;
 OrderBook& OrderBook::getInstance() {

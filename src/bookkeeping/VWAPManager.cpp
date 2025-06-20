@@ -25,7 +25,7 @@ constexpr char STOCK_IS_TRADING                         = 'T';
 void VWAPManager::outputBrokenTradeAdjustedVWAP() {
 
     // Get our output objects. Cursory Google search implies this is RAII, so no need to close explcitly
-    std::array<fmt::ostream, NUMBER_OF_PERIODS_PER_DAY> fileDecriptors = _getFileDescriptors();
+    std::array<std::shared_ptr<spdlog::logger>, NUMBER_OF_PERIODS_PER_DAY> loggers = _getOutputLoggers();
 
     // Perform the broken trade VWAP adjustment
     _mergeRemainingBrokenTradeCandidatesIntoVWAPStatsPerPeriod();
@@ -43,7 +43,7 @@ void VWAPManager::outputBrokenTradeAdjustedVWAP() {
             if(cumulativeVolumeForOneIssue == 0) continue; // VWAP undefined if no volume
             uint64_t vwapThisPeriod = cumulativePVForOneIssue / cumulativeVolumeForOneIssue;
             // This line actually commits the stock symbol and VWAP to the file
-            fileDecriptors[i].print("{}: {}\n", currentStockSymbol, _getPriceFromInt(vwapThisPeriod));
+            loggers[i] -> info("{}: {}", currentStockSymbol, _getPriceFromInt(vwapThisPeriod));
         }
     }
 }
@@ -197,18 +197,18 @@ void VWAPManager::_mergeRemainingBrokenTradeCandidatesIntoVWAPStatsPerPeriod() {
     temp.swap(_brokenTradeCandidates);
 }   
 
-std::array<fmt::ostream, NUMBER_OF_PERIODS_PER_DAY> VWAPManager::_getFileDescriptors() {
-    std::array<fmt::ostream, NUMBER_OF_PERIODS_PER_DAY> fileDescriptors = {
-        fmt::output_file("./../LiveOutput/vwap_1.txt"),
-        fmt::output_file("./../LiveOutput/vwap_2.txt"),
-        fmt::output_file("./../LiveOutput/vwap_3.txt"),
-        fmt::output_file("./../LiveOutput/vwap_4.txt"),
-        fmt::output_file("./../LiveOutput/vwap_5.txt"),
-        fmt::output_file("./../LiveOutput/vwap_6.txt"),
-        fmt::output_file("./../LiveOutput/vwap_7.txt")
+std::array<std::shared_ptr<spdlog::logger>, NUMBER_OF_PERIODS_PER_DAY> VWAPManager::_getOutputLoggers() {
+    std::array<std::shared_ptr<spdlog::logger>, NUMBER_OF_PERIODS_PER_DAY> outputLoggers = {
+        spdlog::basic_logger_mt("period_1_logger", "./../../LiveOutput/vwap_1.txt"),
+        spdlog::basic_logger_mt("period_2_logger", "./../../LiveOutput/vwap_2.txt"),
+        spdlog::basic_logger_mt("period_3_logger", "./../../LiveOutput/vwap_3.txt"),
+        spdlog::basic_logger_mt("period_4_logger", "./../../LiveOutput/vwap_4.txt"),
+        spdlog::basic_logger_mt("period_5_logger", "./../../LiveOutput/vwap_5.txt"),
+        spdlog::basic_logger_mt("period_6_logger", "./../../LiveOutput/vwap_6.txt"),
+        spdlog::basic_logger_mt("period_7_logger", "./../../LiveOutput/vwap_7.txt")
     };
 
-    return fileDescriptors;
+    return outputLoggers;
 }
 
 
