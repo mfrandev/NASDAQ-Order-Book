@@ -5,10 +5,12 @@
 #include <unordered_map>
 #include <array>
 #include <cmath>
-#include <fmt/os.h>
-#include <fmt/format.h>
+#include <string>
+#include <memory>
 
 #include <time_utils.h>
+#include <spdlog/spdlog.h>
+#include "spdlog/sinks/basic_file_sink.h"
 
 constexpr uint32_t TOP_OF_10_PERCENT_BAND = 250000;
 constexpr uint32_t TOP_OF_5_PERCENT_BAND  = 500000;
@@ -98,10 +100,6 @@ class BrokenTradeCandidate {
 class VWAPManager {
     public:
 
-    void printNumBadTrades() {
-        fmt::println("{}",_brokenTradeCandidates.size());
-    }
-
     static VWAPManager& getInstance();
 
     // Highest level function call for dumping periodic VWAP to a file
@@ -143,7 +141,7 @@ class VWAPManager {
 
     void _handleOrderOrTradeExecuted(uint16_t stockLocate, uint32_t price, uint64_t volume, uint64_t timestamp, uint64_t matchNumber);
     bool _flagOrderOrTradeAsErroneousCandidate(uint32_t price, uint32_t lastPrice);
-    std::array<fmt::ostream, NUMBER_OF_PERIODS_PER_DAY> _getFileDescriptors();
+    std::array<std::shared_ptr<spdlog::logger>, NUMBER_OF_PERIODS_PER_DAY> _getOutputLoggers();
 
     double _getPriceFromInt(uint32_t price);
 };
