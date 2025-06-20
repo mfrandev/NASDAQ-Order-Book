@@ -1,24 +1,24 @@
 #include <queue_utils.h>
 
-// Singleton declaration and getter of the lockfree SPSC queue wrapper
-LockfreeSPSC* LockfreeSPSC::_instance = nullptr;
-LockfreeSPSC& LockfreeSPSC::getInstance() {
+// Singleton declaration and getter of the boost lockfree SPSC queue wrapper
+BoostLockfreeSPSC* BoostLockfreeSPSC::_instance = nullptr;
+BoostLockfreeSPSC& BoostLockfreeSPSC::getInstance() {
     if(_instance == nullptr)
-        _instance = new LockfreeSPSC();
+        _instance = new BoostLockfreeSPSC();
     return *_instance;
 }
 
 /**
  * Push an element to the queue
  */
-bool LockfreeSPSC::pushMesageToLockfreeSPSCQueue(Message* message) {
+bool BoostLockfreeSPSC::pushMesageToLockfreeSPSCQueue(Message* message) {
     return mq.push(message);
 }
 
 /**
  * Pop an element from the queue, make it accessible via the parameter passed to the function by reference
  */
-bool LockfreeSPSC::popMesageFromLockfreeSPSCQueue(Message*& message) {
+bool BoostLockfreeSPSC::popMesageFromLockfreeSPSCQueue(Message*& message) {
     message = nullptr;
     return mq.pop(message);
 }

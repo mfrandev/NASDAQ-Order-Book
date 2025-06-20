@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cassert>
 #include <atomic>
-
 #include <queue_utils.h>
 
 namespace lockfree {
@@ -32,8 +31,11 @@ namespace lockfree {
             T* isFreeBufferMap[MempoolSize];
 
             // On AMD64/x86_64 and ARM CPUs, cache lines are 64 bytes
-            alignas(64) std::atomic<size_t> _allocatorIndex{0};
-            alignas(64) std::atomic<size_t> _deallocatorIndex{0};
+            alignas(64) std::atomic<unsigned long> _allocatorIndex{0};
+            alignas(64) std::atomic<unsigned long> _deallocatorIndex{0};
+
+            // If 2, then this type is always lock free, not determined at runtime
+            static_assert(ATOMIC_LONG_LOCK_FREE == 2);
 
         public:
             MempoolSPSC() {

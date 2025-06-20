@@ -9,17 +9,19 @@
 #include <Message.h>
 
 #include <boost/lockfree/spsc_queue.hpp>
+#include <mpmc_queue.h>
+#include <pointer_mpmc_queue.h>
 
 // Important to define, since this will the maximum memory pool size for high freq message pools in SPSC implementation
-constexpr size_t SPSC_QUEUE_CAPACITY = 32;
+constexpr size_t SPSC_QUEUE_CAPACITY = 1024;
 
 /**
  * A little wrapper for the boost lockfree SPSC queue
  */
-class LockfreeSPSC {
+class BoostLockfreeSPSC {
 
     public:
-        static LockfreeSPSC& getInstance();
+        static BoostLockfreeSPSC& getInstance();
 
         bool pushMesageToLockfreeSPSCQueue(Message* message);
         bool popMesageFromLockfreeSPSCQueue(Message*& message);
@@ -27,10 +29,13 @@ class LockfreeSPSC {
         size_t read_available() { return mq.read_available(); }
 
     private:
-        static LockfreeSPSC* _instance;
+        static BoostLockfreeSPSC* _instance;
         boost::lockfree::spsc_queue<Message*, boost::lockfree::capacity<SPSC_QUEUE_CAPACITY>> mq;
 };
 
+/**
+ * Mutex/Condition Variable Locking Queue
+ */
 namespace locking {
 
     template <typename T, const size_t QueueSize>
@@ -95,7 +100,6 @@ namespace locking {
                 front = next;
                 _cv.notify_one();
             }
-
     };
 }
 
