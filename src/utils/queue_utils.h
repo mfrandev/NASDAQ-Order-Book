@@ -9,8 +9,6 @@
 #include <Message.h>
 
 #include <boost/lockfree/spsc_queue.hpp>
-#include <mpmc_queue.h>
-#include <pointer_mpmc_queue.h>
 
 // Important to define, since this will the maximum memory pool size for high freq message pools in SPSC implementation
 constexpr size_t SPSC_QUEUE_CAPACITY = 1024;
