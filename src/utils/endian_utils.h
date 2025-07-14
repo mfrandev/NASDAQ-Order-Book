@@ -2,6 +2,7 @@
 #define NASDAQ_UTILS_ENDIAN_UTILS_H_
 
 #include <cstdint>
+#include <cstring>
 #include <stdlib.h>
 
 /**

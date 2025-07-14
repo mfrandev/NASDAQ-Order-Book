@@ -3,7 +3,8 @@ find_package(Boost REQUIRED)
 include_directories(
     "."
     "../lib/CLI11"
-    "../lib/lockfree_mpmc_queue"
+    "../lib/robin-map/include/tsl"
+    "../lib/unordered_dense/include/ankerl"
     "./bookkeeping" 
     "./messages"
     "./utils"
@@ -17,5 +18,5 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
 
 # The compiled library code is here
 add_executable(nasdaq_order_book ${SOURCES})
-target_link_libraries(nasdaq_order_book PRIVATE spdlog::spdlog)
+target_link_libraries(nasdaq_order_book PRIVATE spdlog::spdlog absl::node_hash_map)
 target_compile_options(nasdaq_order_book PRIVATE -march=native) # for __sync_val_compare_and_swap
