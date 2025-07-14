@@ -4,9 +4,9 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
-#include <queue>
 
 #include <Message.h>
+#include <lockfree_queue.h>
 
 #include <boost/lockfree/spsc_queue.hpp>
 

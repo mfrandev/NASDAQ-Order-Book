@@ -20,6 +20,12 @@ class Message {
         {}
         explicit Message() = default;
         virtual ~Message() = default;
+
+        Message(const Message&) = default;
+        Message& operator=(const Message&) = default;
+        Message(Message&& header) noexcept = default;
+        Message& operator=(Message&& header) noexcept = default;
+
         virtual bool processMessage() const = 0; 
 
         const BinaryMessageHeader& getHeader() const { return header; }

@@ -16,16 +16,19 @@
 
 #include <queue_utils.h>
 #include <time_utils.h>
+#include <lockfree_queue.h>
 
 enum Mode {
     SEQ = 0, 
     LOCKING_SPSC = 1,
     BOOST_LF_SPSC = 2,
+    ER_LF_SPSC = 3,
 };
 
 const std::string& SEQ_STR("seq");
 const std::string& LOCKING_SPSC_STR("locking_spsc");
 const std::string& BOOST_LF_SPSC_STR("boost_lf_spsc");
+const std::string& ER_LF_SPSC_STR("er_lf_spsc");
 
 const std::string& CONSOLE_LOGGER("console");
 
@@ -33,6 +36,7 @@ Mode getModeFromString(const std::string& mode) {
     if(mode == SEQ_STR) return Mode::SEQ;
     else if(mode == LOCKING_SPSC_STR) return Mode::LOCKING_SPSC;
     else if(mode == BOOST_LF_SPSC_STR) return Mode::BOOST_LF_SPSC;
+    else if(mode == ER_LF_SPSC_STR) return Mode::ER_LF_SPSC;
     return Mode::BOOST_LF_SPSC;
 }
 
@@ -45,11 +49,11 @@ int main(int argc, char* argv[]) {
     auto consoleLogger = spdlog::stdout_color_mt(CONSOLE_LOGGER);
 
     std::string filepath("../../ITCHFiles/01302019.NASDAQ_ITCH50");
-    std::string mode("lf_spsc");
+    std::string mode(BOOST_LF_SPSC_STR);
 
     CLI::App app{"Nasdaq-Order-Book"};
     app.add_option("-f,--file", filepath, "Input ITCH file");
-    app.add_option("-m,--mode", mode, "Execution mode options: [seq, locking_spsc, boost_lf_spsc]");
+    app.add_option("-m,--mode", mode, "Execution mode options: [seq, locking_spsc, boost_lf_spsc, er_lf_spsc]");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -146,6 +150,87 @@ int main(int argc, char* argv[]) {
         // consoleLogger -> info("Processed {} messages, {} were passed to the queue and {} were consumed. {} were nullptr or afterhours for a total of {} fully processed", counter, counterToQueue, consumerCounter, throwawayCounter, consumerCounter - throwawayCounter);
         workFinished = true;
         mq.pushMesageToLockfreeSPSCQueue(new SentinelMessage());
+
+        // Synchronize the producer (main) and consumer threads.
+        consoleLogger -> info("Waiting on consumer thread to join... Is work done? {}", isWorkFinished());
+        if(itchConsumer.joinable()) itchConsumer.join();
+        consoleLogger -> info("Consumer thread joined.");
+
+        // Produce the output
+        VWAPManager::getInstance().outputBrokenTradeAdjustedVWAP();
+    } 
+
+    else if(modeAsEnum == Mode::ER_LF_SPSC) {
+        rigtorp::SPSCQueue<Message*> mq = rigtorp::SPSCQueue<Message*>(SPSC_QUEUE_CAPACITY/2);
+
+        extern bool workFinished;
+        // uint64_t consumerCounter = 0;
+        // uint64_t throwawayCounter = 0;
+        // Launch the "ITCH Messages" Queue processing thread
+        std::thread itchConsumer([&mq, &moreMessagesIncoming, &consoleLogger/*, &consumerCounter, &throwawayCounter*/] {
+            uint64_t previousTimestamp = 0;
+            // uint64_t counter = 0;
+            while(moreMessagesIncoming) {
+                if (mq.empty()) {
+                    std::this_thread::yield();
+                    continue;
+                }
+
+                Message* message = *mq.front();
+                mq.pop();
+                // assert(success); // If this fails, we lost sequentiality invariant
+                // consumerCounter++;
+            
+                if(message == nullptr) continue;
+
+                uint64_t currentTimestamp = message -> getHeader().getTimestamp();
+                // Bookkeep time
+                ProcessMessage::processHeaderTimestamp(currentTimestamp);
+                // consoleLogger -> info("current: {}, prev: {}", currentTimestamp, previousTimestamp);
+                // assert(previousTimestamp <= currentTimestamp || previousTimestamp == 0); // Similarly, we are processing messages out of order if this is ever false
+                previousTimestamp = currentTimestamp;
+                
+                // Do bookkeeping, etc.
+                bool shouldContinue = message -> processMessage();
+                // if(!processed) throwawayCounter++;
+                delete message;
+                if(!shouldContinue) moreMessagesIncoming = false;
+            }
+            consoleLogger -> info("Exiting the consumer thread");
+        });
+
+        // And here is the magic
+        // uint64_t counter = 0;
+        // uint64_t counterToQueue = 0;
+        while(file) {
+
+            // For some reason, there happens to be two leading bytes at the start of each line
+            file.read(buffer.data(), NUMBER_OF_BYTES_FOR_HEADER_CHUNK);
+            BinaryMessageHeader header = parseHeader(&buffer[NUMBER_OF_BYTES_OFFSET_FOR_HEADER_CHUNK]);
+            // consoleLogger -> info("{}. {} {} /*{} */{}", ++counter, header.getMessageType(), header.getStockLocate(), /*header.getTrackingNumber(),*/ header.getTimestamp());
+
+            // Get the message body 
+            std::size_t numberOfBytesForBody = ProcessMessage::messageTypeToNumberOfBytes(header.getMessageType());
+            file.read(&buffer[NUMBER_OF_BYTES_FOR_HEADER_CHUNK], numberOfBytesForBody);
+
+            // Parse the binary message, then add to the processing queue (if not nullptr)
+            Message* messagePtr = ProcessMessage::getMessage(&buffer[NUMBER_OF_BYTES_FOR_HEADER_CHUNK], numberOfBytesForBody, std::move(header));
+            if(messagePtr == nullptr) {
+                delete messagePtr;
+                continue;
+            }
+
+            while(!mq.try_push(messagePtr)) {
+                std::this_thread::yield();
+            }
+
+
+        }
+        // Close file
+        file.close();
+        // consoleLogger -> info("Processed {} messages, {} were passed to the queue and {} were consumed. {} were nullptr or afterhours for a total of {} fully processed", counter, counterToQueue, consumerCounter, throwawayCounter, consumerCounter - throwawayCounter);
+        workFinished = true;
+        mq.push(new SentinelMessage());
 
         // Synchronize the producer (main) and consumer threads.
         consoleLogger -> info("Waiting on consumer thread to join... Is work done? {}", isWorkFinished());

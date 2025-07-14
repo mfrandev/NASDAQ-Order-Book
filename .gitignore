@@ -2,8 +2,10 @@
 **/docs
 # **/lib
 **/heaptrack*
+**/perf*
 *.NASDAQ_ITCH50
 
+flamegraph_*
 **/.vscode/
 **/.DS_Store
 stats*

@@ -3,25 +3,31 @@
 
 #include <string>
 #include <cstdint>
+#include <array>
 
 #include <Message.h>
 #include <MessageHeader.h>
+#include <StockTradingAction.h>
 
 #include <OrderBook.h>
 
 #include <mempool.h>
 
 constexpr size_t BUY_SELL_INDICATOR_SIZE = 1;
+
 // constexpr size_t STOCK_SIZE = 8; Use the value from StockTradingAction.h
 
 // Store the Add Order message body
-class AddOrder : public Message {
+class alignas(64) AddOrder : public Message {
     private:
         uint64_t orderReferenceNumber;
-        char buySellIndicator;
+        std::array<char, STOCK_SIZE> stock;
         uint32_t shares;
-        std::string stock;
         uint32_t price;
+        char buySellIndicator;
+
+        uint64_t a = 0;
+        // uint64_t b;
 
         static lockfree::MempoolSPSC<AddOrder, SPSC_QUEUE_CAPACITY + 2> _mempool;
     
@@ -29,7 +35,7 @@ class AddOrder : public Message {
         /**
          * Rule of 5 compliant
          */
-        AddOrder(BinaryMessageHeader header, uint64_t orderReferenceNumber, char buySellIndicator, uint32_t shares, std::string stock, uint32_t price) :
+        AddOrder(BinaryMessageHeader header, uint64_t orderReferenceNumber, char buySellIndicator, uint32_t shares, std::array<char, STOCK_SIZE> stock, uint32_t price) :
         Message(std::move(header)),
         orderReferenceNumber(orderReferenceNumber),
         buySellIndicator(buySellIndicator),
@@ -63,14 +69,14 @@ class AddOrder : public Message {
         void setOrderReferenceNumber(uint64_t orderReferenceNumber) { this -> orderReferenceNumber = orderReferenceNumber; }
         void setBuySellIndicator(char buySellIndicator) { this -> buySellIndicator = buySellIndicator; }
         void setShares(uint32_t shares) { this -> shares = shares; }
-        void setStock(std::string stock) { this -> stock = std::move(stock); }
+        // void setStock(std::array<char, STOCK_SIZE> stock) { this -> stock = std::move(stock); }
         void setPrice(uint32_t price) { this -> price = price; }
 
         // Getters
         uint64_t getOrderReferenceNumber() const { return this -> orderReferenceNumber; }
         char getBuySellIndicator() const { return this -> buySellIndicator; }
         uint32_t getShares() const { return this -> shares; }
-        std::string getStock() const { return this -> stock; }
+        // std::array<char, STOCK_SIZE> getStock() const { return this -> stock; }
         uint32_t getPrice() const { return this -> price; }
 };
 

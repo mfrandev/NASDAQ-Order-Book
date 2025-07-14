@@ -12,6 +12,8 @@ OrderBook& OrderBook::getInstance() {
         _instance = new OrderBook();
     return *_instance;
 }
+template<typename T>
+lockfree::MempoolSPSC<T, ACTIVE_ORDER_MEMPOOL_SIZE> OrderBookAllocator<T>::_mempool;
 
 /**
  * Add the active order data to the book.

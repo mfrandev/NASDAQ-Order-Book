@@ -4,8 +4,10 @@
 #include <string_utils.h>
 #include <endian_utils.h>
 
-lockfree::MempoolSPSC<AddOrder, SPSC_QUEUE_CAPACITY + 2> AddOrder::_mempool;
+#include <spdlog/spdlog.h>
 
+lockfree::MempoolSPSC<AddOrder, SPSC_QUEUE_CAPACITY + 2> AddOrder::_mempool;
+extern const std::string& CONSOLE_LOGGER;
 /** 
  * Parse the AddOrder message body
  */
@@ -17,9 +19,14 @@ AddOrder* parseAddOrderBody(BinaryMessageHeader header, const char* data) {
     offset += 1;
     uint32_t shares = toHostEndianUpTo64(&data[offset], 4); // We know this is a 4 byte int
     offset += 4;
-    std::string stock = std::string(&data[offset], STOCK_SIZE);
-    stripWhitespaceFromCPPString(stock);
+    std::array<char, STOCK_SIZE> stock;
+    // std::memcpy(&data[offset], stock, STOCK_SIZE);
+    // stripWhitespaceFromCPPString(stock);
+    // spdlog::get(CONSOLE_LOGGER) -> info("stock is {} bytes", sizeof(stock));
     offset += STOCK_SIZE;
     uint32_t price = toHostEndianUpTo64(&data[offset], 4); // We know this is a 4 byte int
+    // AddOrder* t = new AddOrder(std::move(header), orderReferenceNumber, buySellIndicator, shares, std::move(stock), price);
+    // spdlog::get(CONSOLE_LOGGER) -> info("add order is {} bytes", sizeof(*t));
+    // return t;
     return new AddOrder(std::move(header), orderReferenceNumber, buySellIndicator, shares, std::move(stock), price);
 }

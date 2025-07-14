@@ -32,7 +32,9 @@ namespace lockfree {
 
             // On AMD64/x86_64 and ARM CPUs, cache lines are 64 bytes
             alignas(64) std::atomic<unsigned long> _allocatorIndex{0};
+            alignas(64) unsigned long _allocatorIndexCached{0}; 
             alignas(64) std::atomic<unsigned long> _deallocatorIndex{0};
+            alignas(64) unsigned long _deallocatorIndexCached{0};
 
             // If 2, then this type is always lock free, not determined at runtime
             static_assert(ATOMIC_LONG_LOCK_FREE == 2);
@@ -51,8 +53,10 @@ namespace lockfree {
                 auto nextAllocatorIndex = allocatorIndex + 1;
                 if(nextAllocatorIndex == MempoolSize) 
                     nextAllocatorIndex = 0;
-                if(nextAllocatorIndex == _deallocatorIndex.load(std::memory_order_acquire))
-                    return nullptr;
+                if(nextAllocatorIndex == _deallocatorIndexCached) {
+                    _deallocatorIndexCached = _deallocatorIndex.load(std::memory_order_acquire);
+                    if(_deallocatorIndexCached == nextAllocatorIndex) return nullptr;
+                }
                 T* resource = isFreeBufferMap[allocatorIndex];
                 _allocatorIndex.store(nextAllocatorIndex, std::memory_order_release);
                 return resource;
@@ -63,8 +67,10 @@ namespace lockfree {
              */
             void deallocate(T* item) {
                 auto const deallocatorIndex = _deallocatorIndex.load(std::memory_order_relaxed);
-                if(deallocatorIndex == _allocatorIndex.load(std::memory_order_acquire))
-                    return;
+                if(deallocatorIndex == _allocatorIndexCached) {
+                    _allocatorIndexCached = _allocatorIndex.load(std::memory_order_acquire);
+                    if(deallocatorIndex == _allocatorIndexCached) return;
+                }
                 isFreeBufferMap[deallocatorIndex] = item;
                 auto nextDeallocatorIndex = deallocatorIndex + 1;
                 if(nextDeallocatorIndex == MempoolSize)
