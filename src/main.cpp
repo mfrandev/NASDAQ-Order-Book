@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
     auto consoleLogger = spdlog::stdout_color_mt(CONSOLE_LOGGER);
 
     std::string filepath("../../ITCHFiles/01302019.NASDAQ_ITCH50");
-    std::string mode(BOOST_LF_SPSC_STR);
+    std::string mode(SEQ_STR);
 
     CLI::App app{"Nasdaq-Order-Book"};
     app.add_option("-f,--file", filepath, "Input ITCH file");
