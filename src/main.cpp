@@ -8,8 +8,7 @@
 #include <MessageHeader.hpp>
 #include <BinaryMessageWrapper.h>
 
-#include <message_utils.hpp>
-#include <queue_utils.hpp>
+#include <ShardManager.hpp>
 
 const std::string& CONSOLE_LOGGER("console");
 
@@ -31,23 +30,39 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    constexpr int readerThreadCore = 2;
+    if(!pin_to_core(readerThreadCore)) {
+        consoleLogger -> info("Failed to pin reader thread to core {}", readerThreadCore);
+    }
+
     // Start execution timer
     auto start = std::chrono::system_clock::now();
 
+    {
+        ShardManager<NUMBER_OF_SHARDS, SHARD_SIZE> shardManager; // Default constructed, class itself knows all capacity values
+        shardManager.start();
+        // uint32_t counter = 0;
+        while(file) {
 
-    while(file) {
+            BinaryMessageWrapper wrappedMessage;
 
-        BinaryMessageWrapper wrappedMessage;
+            // For some reason, there happens to be two leading bytes at the start of each line
+            file.read(wrappedMessage.buffer, NUMBER_OF_BYTES_FOR_HEADER_CHUNK);
+            wrappedMessage.header = parseHeader(&wrappedMessage.buffer[NUMBER_OF_BYTES_OFFSET_FOR_HEADER_CHUNK]);
+            // consoleLogger -> info ("{}. {} {}", wrappedMessage.header.messageType, wrappedMessage.header.stockLocate, wrappedMessage.header.timestamp); 
+            file.read(wrappedMessage.buffer, messageTypeToNumberOfBytes(wrappedMessage.header.messageType));
+            // Now ready to add to queue
 
-        // For some reason, there happens to be two leading bytes at the start of each line
-        file.read(wrappedMessage.buffer, NUMBER_OF_BYTES_FOR_HEADER_CHUNK);
-        wrappedMessage.header = parseHeader(&wrappedMessage.buffer[NUMBER_OF_BYTES_OFFSET_FOR_HEADER_CHUNK]);
-        // consoleLogger -> info ("{}. {} {}", header.messageType, header.stockLocate, header.timestamp); 
-        file.read(wrappedMessage.buffer, messageTypeToNumberOfBytes(wrappedMessage.header.messageType));
-        // Now ready to add to queue
+            shardManager.dispatch(std::move(wrappedMessage));
+            // counter++;
+        }
+        // Close file
+        file.close();
+        // consoleLogger->info("Reader dispatched {} messages", counter);
+        consoleLogger->info("Joining Consumers..."); 
+        shardManager.shutDownConsumers();    
+        consoleLogger->info("Consumers joined");    
     }
-    // Close file
-    file.close();
 
     auto end = std::chrono::system_clock::now();
     // Convert nanos to seconds

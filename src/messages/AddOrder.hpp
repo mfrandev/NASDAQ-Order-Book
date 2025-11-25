@@ -14,7 +14,7 @@ struct AddOrder {
 
 };
 
-AddOrder parseAddOrderBody(const char* data) {
+AddOrder parseAddOrderBody(const char data[MAX_BUFFER_SIZE]) {
 
     size_t offset = 0;
     uint64_t orderReferenceNumber = toHostEndianUpTo64(

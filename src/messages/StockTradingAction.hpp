@@ -15,7 +15,7 @@ struct StockTradingAction {
  * TODO: This message is responsible for building the map of tradable stock tickers {stockLocate -> stockTicker}. 
  * Will need to build that map as these messages get processed to bypass the need to store any string data in the message itself.
  */
-StockTradingAction parseStockTradingActionBody(uint16_t stockLocate, const char* data) {
+StockTradingAction parseStockTradingActionBody(uint16_t stockLocate, const char data[MAX_BUFFER_SIZE]) {
     size_t offset = 0;
     std::string stock = std::string(&data[offset], MessageFieldSizes::STOCK_SIZE);
     stripWhitespaceFromCPPString(stock);

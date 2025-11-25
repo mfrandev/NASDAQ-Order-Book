@@ -18,7 +18,7 @@ struct MessageHeader {
  * Take a pre-loaded sequence of bytes and parse the ITCH header out of it
  * Use the same portion of memory to store the header, just because
  */
-MessageHeader parseHeader(const char* data) {
+MessageHeader parseHeader(const char data[MAX_BUFFER_SIZE]) {
     size_t offset = 0;
     char messageType = data[offset];
     offset += MessageFieldSizes::MESSAGE_TYPE_SIZE;

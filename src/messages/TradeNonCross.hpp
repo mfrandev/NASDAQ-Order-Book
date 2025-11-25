@@ -14,7 +14,7 @@ struct TradeNonCross {
 
 };
 
-TradeNonCross parseTradeNonCrossBody(const char* data) {
+TradeNonCross parseTradeNonCrossBody(const char data[MAX_BUFFER_SIZE]) {
     size_t offset = 0;
     uint64_t orderReferenceNumber = toHostEndianUpTo64(&data[offset], MessageFieldSizes::ORDER_REFERENCE_NUMBER_SIZE); // We know this is an 8 byte int
     offset += MessageFieldSizes::ORDER_REFERENCE_NUMBER_SIZE;

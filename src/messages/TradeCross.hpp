@@ -12,7 +12,7 @@ struct TradeCross {
     // std::string stock
 };
 
-TradeCross parseTradeCrossBody(const char* data) {
+TradeCross parseTradeCrossBody(const char data[MAX_BUFFER_SIZE]) {
     size_t offset = 0;
     uint64_t shares = toHostEndianUpTo64(&data[offset], MessageFieldSizes::SHARES_IN_TRADE_MESSAGE_SIZE);
     offset += MessageFieldSizes::SHARES_IN_TRADE_MESSAGE_SIZE;

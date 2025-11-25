@@ -12,7 +12,7 @@ struct OrderExecuted {
     
 };
 
-OrderExecuted parseOrderExecutedBody(const char* data) {
+OrderExecuted parseOrderExecutedBody(const char data[MAX_BUFFER_SIZE]) {
     size_t offset = 0;
     uint64_t orderReferenceNumber = toHostEndianUpTo64(&data[offset], MessageFieldSizes::ORDER_REFERENCE_NUMBER_SIZE); // We know this is 8 bytes
     offset += MessageFieldSizes::ORDER_REFERENCE_NUMBER_SIZE;

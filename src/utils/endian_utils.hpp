@@ -14,7 +14,7 @@
  * The binary file stores integers big-endian, and x86 is little endian.
  * Here is a utility function to convery big-endian to little-endian
  */
-uint64_t toHostEndianUpTo64(const char* data, size_t size) {
+uint64_t toHostEndianUpTo64(const char data[64], size_t size) {
     uint64_t result = 0;
 
     // shift to make the LSB of "data" the MSB of "result"
@@ -28,7 +28,7 @@ uint64_t toHostEndianUpTo64(const char* data, size_t size) {
 /**
  * If the host machine is already big-endian, do nothing special
  */
-uint64_t toHostEndianUpTo64(const char* data, size_t size) {
+uint64_t toHostEndianUpTo64(const char data[64], size_t size) {
     uint64_t result;
     std::memcmp(&result, &data[0], size);
     return result;

@@ -9,7 +9,7 @@ struct SystemEvent {
 
 };
 
-SystemEvent parseSystemEventBody(const char* data) {
+SystemEvent parseSystemEventBody(const char data[MAX_BUFFER_SIZE]) {
     size_t offset = 0;
     char eventCode = data[offset];
     return SystemEvent{eventCode};

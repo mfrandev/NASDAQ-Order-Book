@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.15...3.25)
 project(
     NASDAQ-Order-Book-MPMC
     DESCRIPTION "VWAP from Binary ITCH 5.0 File"
-    LANGUAGES CXX
+    LANGUAGES C CXX
 )
 
 set(CMAKE_CXX_STANDARD 20)
