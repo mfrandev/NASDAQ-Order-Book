@@ -27,16 +27,17 @@ class ShardManager {
     void start() {
         for(auto i = 0; i < numberOfShards; ++i) {
             // TODO: Check once the shard threads become CPU bound, and distribute the workload across cores 4-14 inclusive (pass coreIndex by value)
-            _threads[i] = std::thread(&ShardConsumer::run, &_shards[i], std::ref(_queues[i]), 14);
+            _threads[i] = std::thread(&ShardConsumer::run, &_shards[i], std::ref(_queues[i]), coreIndex, std::ref(_orderBooks[i]));
             coreIndex += 2;
         }
     }
 
     bool dispatch(BinaryMessageWrapper&& msg) {
+        if(isIrrelevantMessageType(msg.header.messageType)) 
+            return false;
         uint8_t queueIndex = getShardIndex(msg.header.stockLocate);
-        while(_queues[queueIndex].buffer.size() == _queues[queueIndex].buffer.capacity()) {
+        while(_queues[queueIndex].buffer.size() == _queues[queueIndex].buffer.capacity())
             std::this_thread::yield();
-        }
         _queues[queueIndex].buffer.push(msg);
         return true;
     }
@@ -60,6 +61,8 @@ class ShardManager {
 
     // One queue per-shard
     std::array<queue_type, numberOfShards> _queues;
+
+    std::array<OrderBook, numberOfShards> _orderBooks;
 
     template<size_t... I>
     static std::array<queue_type, numberOfShards> make_queues(std::index_sequence<I...>) {

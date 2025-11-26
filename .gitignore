@@ -12,5 +12,6 @@ LiveOutput/vwap**
 # Don't push the build
 build/
 
-# Uncomment later to add moodycamel MPMC queue to the project
-lib/concurrentqueue
+# Ignore TODOs notes
+todos.txt
+

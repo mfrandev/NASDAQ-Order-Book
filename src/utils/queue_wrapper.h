@@ -3,7 +3,6 @@
 #ifndef QUEUE_WRAPPER_H_
 #define QUEUE_WRAPPER_H_
 
-#include <readerwritercircularbuffer.h>
 #include <lockfree_queue.h>
 
 #include <BinaryMessageWrapper.h>

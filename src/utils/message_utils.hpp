@@ -15,7 +15,61 @@ uint32_t getShardIndex(uint16_t stockLocate) {
     return index % NUMBER_OF_SHARDS;
 }
 
-size_t messageTypeToNumberOfBytes(char messageType)
+bool isIrrelevantMessageType(const char messageType) {
+    switch (messageType)
+    {
+    case MessageTypes::MESSAGE_TYPE_SYSTEM_EVENT:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_STOCK_DIRECTORY:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_STOCK_TRADING_ACTION:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_REG_SHO:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_MARKET_PARTICIPANT_POSITION:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_MWCB_DECLINE_LEVEL:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_MWCB_STATUS:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_QUOTING_PERIOD_UPDATE:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_LULD_AUCTION_COLLAR:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_OPERATIONAL_HALT:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_ADD_ORDER_NO_MPID:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_ADD_ORDER_WITH_MPID:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_ORDER_EXECUTED:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_ORDER_EXECUTED_WITH_PRICE:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_ORDER_CANCELLED:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_ORDER_DELETE:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_ORDER_REPLACE:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_TRADE_NON_CROSS:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_TRADE_CROSS:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_TRADE_BROKEN:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_NOII:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_RPII:
+        return false;
+    case MessageTypes::MESSAGE_TYPE_DLCR_PRICE_DISCOVERY:
+        return false;
+    default:
+        return true;
+    }
+}
+
+size_t messageTypeToNumberOfBytes(const char messageType)
 {
     size_t messageSize;
     switch (messageType)
@@ -23,7 +77,6 @@ size_t messageTypeToNumberOfBytes(char messageType)
     case MessageTypes::MESSAGE_TYPE_SYSTEM_EVENT:
         messageSize = MessageSizes::MESSAGE_SIZE_SYSTEM_EVENT;
         break;
-
     case MessageTypes::MESSAGE_TYPE_STOCK_DIRECTORY:
         messageSize = MessageSizes::MESSAGE_SIZE_STOCK_DIRECTORY;
         break;
@@ -51,14 +104,12 @@ size_t messageTypeToNumberOfBytes(char messageType)
     case MessageTypes::MESSAGE_TYPE_OPERATIONAL_HALT:
         messageSize = MessageSizes::MESSAGE_SIZE_OPERATIONAL_HALT;
         break;
-
     case MessageTypes::MESSAGE_TYPE_ADD_ORDER_NO_MPID:
         messageSize = MessageSizes::MESSAGE_SIZE_ADD_ORDER_NO_MPID;
         break;
     case MessageTypes::MESSAGE_TYPE_ADD_ORDER_WITH_MPID:
         messageSize = MessageSizes::MESSAGE_SIZE_ADD_ORDER_WITH_MPID;
         break;
-
     case MessageTypes::MESSAGE_TYPE_ORDER_EXECUTED:
         messageSize = MessageSizes::MESSAGE_SIZE_ORDER_EXECUTED;
         break;
@@ -74,7 +125,6 @@ size_t messageTypeToNumberOfBytes(char messageType)
     case MessageTypes::MESSAGE_TYPE_ORDER_REPLACE:
         messageSize = MessageSizes::MESSAGE_SIZE_ORDER_REPLACE;
         break;
-
     case MessageTypes::MESSAGE_TYPE_TRADE_NON_CROSS:
         messageSize = MessageSizes::MESSAGE_SIZE_TRADE_NON_CROSS;
         break;
@@ -84,19 +134,15 @@ size_t messageTypeToNumberOfBytes(char messageType)
     case MessageTypes::MESSAGE_TYPE_TRADE_BROKEN:
         messageSize = MessageSizes::MESSAGE_SIZE_TRADE_BROKEN;
         break;
-
     case MessageTypes::MESSAGE_TYPE_NOII:
         messageSize = MessageSizes::MESSAGE_SIZE_NOII;
         break;
-
     case MessageTypes::MESSAGE_TYPE_RPII:
         messageSize = MessageSizes::MESSAGE_SIZE_RPII;
         break;
-
     case MessageTypes::MESSAGE_TYPE_DLCR_PRICE_DISCOVERY:
         messageSize = MessageSizes::MESSAGE_SIZE_DLCR_PRICE_DISCOVERY;
         break;
-
     default:
         messageSize = 0;
         break;

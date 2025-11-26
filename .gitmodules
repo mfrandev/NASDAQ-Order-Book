@@ -4,3 +4,6 @@
 [submodule "lib/murmur3"]
 	path = lib/murmur3
 	url = https://github.com/PeterScott/murmur3
+[submodule "lib/unordered_dense"]
+	path = lib/unordered_dense
+	url = https://github.com/martinus/unordered_dense

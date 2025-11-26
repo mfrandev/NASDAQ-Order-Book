@@ -11,6 +11,7 @@
 #include <thread_utils.hpp>
 #include <queue_wrapper.h>
 #include <Message.hpp>
+#include <OrderBook.h>
 
 #include <iostream>
 // Global counter tracking how many messages consumers have processed
@@ -37,15 +38,50 @@ class ShardConsumer {
             // _cv.wait();
         }
 
-        void processMessage(Message message) {
-            
+        void processMessage(Message&& message, OrderBook& orderBook) {
+            switch(message.body.tag) {
+                case MessageTag::AddOrder:   
+                orderBook.addOrder(message.header.stockLocate, message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
+                break;
+
+                case MessageTag::AddOrderWithMPID:      
+                orderBook.addOrder(message.header.stockLocate, message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);   
+                break;
+                
+                case MessageTag::OrderExecuted:
+                orderBook.executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);              
+                break;
+
+                case MessageTag::OrderExecutedWithPrice: 
+
+                // 1.4.2: "If a firm is looking to use the data in time-and-sales displays or volume calculations, Nasdaq recommends that firms ignore messages marked as non-printable to prevent double counting"
+                orderBook.executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
+                // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) // Do VWAP;
+                // TODO: since printable, account for VWAP here
+                break;
+
+                case MessageTag::OrderCancel:
+                orderBook.cancelOrder(message.body.orderCancel.cancelledShares, message.body.orderCancel.orderReferenceNumber);             
+                break;
+
+                case MessageTag::OrderDelete:
+                orderBook.deleteOrder(message.body.orderDelete.orderReferenceNumber);                
+                break;
+
+                case MessageTag::OrderReplace:      
+                orderBook.replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
+                break;
+                
+                default:
+                break;
+            }
         }
 
     public:
 
         std::atomic<bool> finished{false};
 
-        void run(queue_type& queue, int run_on_this_core) {
+        void run(queue_type& queue, int run_on_this_core, OrderBook& orderBook) {
 
             std::cout << run_on_this_core << std::endl;
     
@@ -58,7 +94,7 @@ class ShardConsumer {
                     queue.buffer.pop();
                     // numMessages.fetch_add(1, std::memory_order_relaxed);
                     MessageBody msgBody = parseMessage(bmsg.header.messageType, bmsg.header.stockLocate, bmsg.buffer);
-                    processMessage(Message{bmsg.header, msgBody});
+                    processMessage(Message{bmsg.header, msgBody}, orderBook);
                 } else {
                     std::this_thread::yield();
                 }

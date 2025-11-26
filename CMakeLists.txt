@@ -17,6 +17,7 @@ execute_process(
 message(STATUS "Underlying compiler: ${COMPILER_INFO}")
 
 add_subdirectory(lib/spdlog)
+add_subdirectory(lib/unordered_dense)
 
 add_subdirectory(src)
 
