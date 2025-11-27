@@ -7,6 +7,7 @@
 
 #include <ShardConsumer.hpp>
 #include <BinaryMessageWrapper.h>
+#include <PerStockOrderBook.h>
 
 #include <message_utils.hpp>
 
@@ -14,7 +15,10 @@ template<uint8_t numberOfShards, uint32_t shardSize>
 class ShardManager {
 
     public:
-    ShardManager() : _queues(make_queues(std::make_index_sequence<numberOfShards>{})), coreIndex(ThreadConstants::FIRST_CONSUMER_CORE) {}
+    ShardManager() : 
+        _queues(make_queues(std::make_index_sequence<numberOfShards>{})), 
+        coreIndex(ThreadConstants::FIRST_CONSUMER_CORE)
+        {}
 
     // Make sure all of the threads are joined when destructing this object.
     // All threads should have terminated after receiving a "sentinel message," which is guaranteed to have occured before this destructor is invoked 
@@ -27,7 +31,14 @@ class ShardManager {
     void start() {
         for(auto i = 0; i < numberOfShards; ++i) {
             // TODO: Check once the shard threads become CPU bound, and distribute the workload across cores 4-14 inclusive (pass coreIndex by value)
-            _threads[i] = std::thread(&ShardConsumer::run, &_shards[i], std::ref(_queues[i]), coreIndex, std::ref(_orderBooks[i]));
+            _threads[i] = std::thread(
+                &ShardConsumer::run, 
+                &_shards[i], 
+                std::ref(_queues[i]), 
+                coreIndex, 
+                std::ref(_orderBook),
+                std::ref(_symbols)
+            );
             coreIndex += 2;
         }
     }
@@ -40,6 +51,17 @@ class ShardManager {
             std::this_thread::yield();
         _queues[queueIndex].buffer.push(msg);
         return true;
+    }
+
+    void dumpOrderBooks(std::ostream& os) const {
+        for (size_t i = 0; i < _orderBook.size(); ++i) {
+            const auto& ptr = _orderBook[i];
+            if (!ptr) {
+                continue;
+            }
+            os << "===== Stock Locate " << i << " =====\n";
+            ptr->dump(os);
+        }
     }
 
     void shutDownConsumers() {
@@ -62,7 +84,10 @@ class ShardManager {
     // One queue per-shard
     std::array<queue_type, numberOfShards> _queues;
 
-    std::array<OrderBook, numberOfShards> _orderBooks;
+    // One order book, becuase no two threads will ever index the same stock locate
+    OrderBook _orderBook;
+
+    std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE> _symbols;
 
     template<size_t... I>
     static std::array<queue_type, numberOfShards> make_queues(std::index_sequence<I...>) {

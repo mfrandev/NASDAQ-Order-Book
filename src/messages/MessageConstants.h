@@ -10,6 +10,52 @@ constexpr size_t MAX_BUFFER_SIZE = 48;
 constexpr char PRINTABLE = 'Y';
 constexpr char NON_PRINTABLE = 'N';
 
+namespace StockDirectoryConstants {
+    constexpr char NASDAQ_GLOBAL_SELECT_MARKET = 'Q';
+    constexpr char NASDAQ_GLOBAL_MARKET = 'G';
+    constexpr char NASDAQ_CAPITAL_MARKET = 'S';
+    constexpr char NYSE = 'N';
+    constexpr char NYSE_AMERICAN = 'A';
+    constexpr char NYSE_ARCA = 'P';
+    constexpr char BATS_Z_EXCHANGE = 'Z';
+    constexpr char INVESTORS_EXCHANGE_LLC = 'V';
+    constexpr char NOT_AVAILABLE = ' ';
+    constexpr char DEFICIENT = 'D';
+    constexpr char DELINQUENT = 'E';
+    constexpr char BANKRUPT = 'Q';
+    constexpr char SUSPENDED = 'S';
+    constexpr char DEFICIENT_AND_BANKRUPT = 'G';
+    constexpr char DEFICIENT_AND_DELINQUENT = 'H';
+    constexpr char DELINQUENT_AND_BANKRUPT = 'K';
+    constexpr char DEFICIENT_DELINQUENT_AND_BANKRUPT = 'K';
+    constexpr char CREATIONS_REDEMPTIONS_SUSPENDED_FOR_EXCHANGE_TRADED_PRODUCT = 'C';
+    constexpr char NORMAL = 'N';
+    constexpr char NASDAQ_SYSTEM_ONLY_ACCEPTS_ROUND_LOTS = 'Y';
+    constexpr char NASDAQ_SYSTEM_NO_ORDER_SIZE_RESTRICTIONS = 'N';
+    constexpr char LIVE_PRODUCTION = 'P';
+    constexpr char TEST = 'T';
+    constexpr char ISSUE_RESTRICTED_UNDER_RULE_203_b_3 = 'Y';
+    constexpr char ISSUE_NOT_RESTRICTED = 'N';
+    constexpr char THRESHOLD_INDICATOR_NOT_AVAILABLE = ' ';
+    constexpr char NASDAQ_LISTED_INSTRUMENT_IS_NEW_IPO = 'Y';
+    constexpr char NASDAQ_LISTED_INSTRUMENT_NOT_NEW_IPO = 'N';
+    constexpr char TIER_1_NMS_STOCKS_AND_SELECT_ETP = '1';
+    constexpr char TIER_2_NMS_STOCKS = '2';
+    constexpr char INSTRUMENT_IS_AN_ETP = 'Y';
+    constexpr char INSTRUMENT_IS_NOT_AN_ETP = 'N';
+    constexpr char ETP_IS_AN_INVERSE_ETP = 'Y';
+    constexpr char ETP_IS_NOT_AN_INVERSE_ETP = 'N';
+};
+
+namespace SystemEventCodes {
+    constexpr char START_OF_MESSAGES = 'O';
+    constexpr char START_OF_SYSTEM_HOURS = 'S';
+    constexpr char START_OF_MARKET_HOURS = 'Q';
+    constexpr char END_OF_MARKET_HOURS = 'M';
+    constexpr char END_OF_SYSTEM_HOURS = 'E';
+    constexpr char END_OF_MESSAGES = 'C';
+};
+
 namespace MessageFieldSizes {
 
     constexpr size_t MESSAGE_TYPE_SIZE = 1;
@@ -33,7 +79,20 @@ namespace MessageFieldSizes {
     constexpr size_t TRADING_STATE_SIZE = 1;
     constexpr size_t RESERVED_SIZE = 1;
     constexpr size_t RESASON_SIZE = 4;
-
+    constexpr size_t MARKET_CATEGORY_SIZE = 1;
+    constexpr size_t FINANCIAL_STATUS_INDICATOR_SIZE = 1;
+    constexpr size_t ROUND_LOT_SIZE_SIZE = 4;
+    constexpr size_t ROUND_LOTS_ONLY_SIZE = 1;
+    constexpr size_t ISSUE_CLASSIFICATION_SIZE = 1;
+    constexpr size_t ISSUE_SUB_TYPE_SIZE = 2;
+    constexpr size_t AUTHENTICITY_SIZE = 1;
+    constexpr size_t SHORT_SALE_THRESHOLD_INDICATOR_SIZE = 1;
+    constexpr size_t IPO_FLAG_SIZE = 1;
+    constexpr size_t LULD_REFERENCE_PRICE_TIER_SIZE = 1;
+    constexpr size_t ETP_FLAG_SIZE = 1;
+    constexpr size_t ETP_LEVERAGE_FACTOR_SIZE = 4;
+    constexpr size_t INVERSE_INDICATOR_SIZE = 1;
+    
 };
 
 /**

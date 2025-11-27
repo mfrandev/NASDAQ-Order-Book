@@ -1,6 +1,7 @@
 #include <fstream>
 #include <vector>
 #include <chrono>
+#include <iostream>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
@@ -59,14 +60,15 @@ int main(int argc, char* argv[]) {
         // Close file
         file.close();
         // consoleLogger->info("Reader dispatched {} messages", counter);
+        auto end = std::chrono::system_clock::now();
+        // Convert nanos to seconds
+        consoleLogger -> info("======== Total Order Book Management Time: {} seconds ========", static_cast<double>(std::chrono::duration_cast<std::chrono::seconds>(end - start).count()));
         consoleLogger->info("Joining Consumers..."); 
         shardManager.shutDownConsumers();    
         consoleLogger->info("Consumers joined");    
+        // std::cout << "===== Final Order Book Dump =====" << std::endl;
+        // shardManager.dumpOrderBooks(std::cout);
     }
-
-    auto end = std::chrono::system_clock::now();
-    // Convert nanos to seconds
-    consoleLogger -> info("======== Total program execution time: {} seconds ========", static_cast<double>(std::chrono::duration_cast<std::chrono::seconds>(end - start).count()));
 
     return 0;
 }
