@@ -24,17 +24,17 @@ class ShardConsumer {
 
     private:
 
-        void backoff(queue_type& queue) {
+        void backoff() {
             // Step 1: Busy wait
             for(auto i = 0; i < ThreadConstants::BUSY_WAIT_CYCLES; ++i) {
                 _mm_pause();
-                if(!queue.buffer.empty()) return;
+                if(!(*_queue).buffer.empty()) return;
             }
             
             // Step 2: thread yield
             for(auto i = 0; i < ThreadConstants::YIELD_CYCLES; ++i) {
                 std::this_thread::yield();
-                if(!queue.buffer.empty()) return;
+                if(!(*_queue).buffer.empty()) return;
             }
 
             // Step 3: Condvar sleep 
@@ -92,7 +92,7 @@ class ShardConsumer {
                 };
 
                 case MessageTypes::MESSAGE_TYPE_STOCK_DIRECTORY:
-                // TODO: Initialize this stock locate 
+                // Initialize this stock locate 
                 (*_orderBook)[stockLocate] = std::make_unique<PerStockOrderBook>();
                 return MessageBody {
                     .tag = MessageTag::StockDirectory,
@@ -125,7 +125,7 @@ class ShardConsumer {
 
                 default:
                 return MessageBody {
-                .tag = MessageTag::NullMessage  
+                    .tag = MessageTag::NullMessage  
                 };
             }
         }
@@ -134,43 +134,46 @@ class ShardConsumer {
         void processMessage(Message&& message) {
             std::unique_ptr<PerStockOrderBook>& orderBook = (*_orderBook)[message.header.stockLocate];
             switch(message.body.tag) {
+
+                // ======================= Order Book Mutation Message Handlers =======================
                 case MessageTag::AddOrder:   
-                orderBook -> addOrder(message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
-                break;
+                    orderBook -> addOrder(message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
+                    break;
 
                 case MessageTag::AddOrderWithMPID:      
-                orderBook -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);   
-                break;
+                    orderBook -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);   
+                    break;
                 
                 case MessageTag::OrderExecuted:
-                orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);              
-                break;
+                    orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);              
+                    break;
 
                 case MessageTag::OrderExecutedWithPrice: 
-
-                // 1.4.2: "If a firm is looking to use the data in time-and-sales displays or volume calculations, Nasdaq recommends that firms ignore messages marked as non-printable to prevent double counting"
-                orderBook -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
-                // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) // Do VWAP;
-                // TODO: since printable, account for VWAP here
-                break;
+                    orderBook -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
+                    // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) // Do VWAP;
+                    // TODO: since printable, account for VWAP here
+                    break;
 
                 case MessageTag::OrderCancel:
-                orderBook -> cancelOrder(message.body.orderCancel.cancelledShares, message.body.orderCancel.orderReferenceNumber);             
-                break;
+                    orderBook -> cancelOrder(message.body.orderCancel.cancelledShares, message.body.orderCancel.orderReferenceNumber);             
+                    break;
 
                 case MessageTag::OrderDelete:
-                orderBook -> deleteOrder(message.body.orderDelete.orderReferenceNumber);                
-                break;
+                    orderBook -> deleteOrder(message.body.orderDelete.orderReferenceNumber);                
+                    break;
 
                 case MessageTag::OrderReplace:      
-                orderBook -> replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
-                break;
+                    orderBook -> replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
+                    break;
+
+                // ======================= System State Admin Message Handlers =======================
                 
                 default:
                 break;
             }
         }
 
+        // Non-owning pattern. Guaranteed that lifetime of shard manager object outlives this consumer object 100% of the time
         queue_type* _queue = nullptr;
         OrderBook* _orderBook = nullptr;
         Symbols* _symbols = nullptr;
@@ -202,6 +205,7 @@ class ShardConsumer {
                     MessageBody msgBody = parseMessage(bmsg.header.messageType, bmsg.header.stockLocate, bmsg.buffer);
                     processMessage(Message{bmsg.header, msgBody});
                 } else {
+                    // backoff();
                     std::this_thread::yield();
                 }
             } 

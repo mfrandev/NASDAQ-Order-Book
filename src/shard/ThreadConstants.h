@@ -10,7 +10,7 @@ constexpr uint8_t NUMBER_OF_SHARDS = 6;
 constexpr uint32_t SHARD_SIZE = 4096;
 
 namespace ThreadConstants {
-    constexpr uint16_t BUSY_WAIT_CYCLES = 150;
+    constexpr uint16_t BUSY_WAIT_CYCLES = 75;
     constexpr uint8_t  YIELD_CYCLES = 5;
     constexpr uint8_t FIRST_CONSUMER_CORE = 4;
 };

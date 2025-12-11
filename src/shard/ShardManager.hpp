@@ -20,14 +20,6 @@ class ShardManager {
         coreIndex(ThreadConstants::FIRST_CONSUMER_CORE)
         {}
 
-    // Make sure all of the threads are joined when destructing this object.
-    // All threads should have terminated after receiving a "sentinel message," which is guaranteed to have occured before this destructor is invoked 
-    ~ShardManager() = default;
-    ShardManager(const ShardManager&) = default;
-    ShardManager(ShardManager&&) noexcept = default;
-    ShardManager& operator=(const ShardManager&) = default;
-    ShardManager& operator=(ShardManager&&) noexcept = default;
-
     void start() {
         for(auto i = 0; i < numberOfShards; ++i) {
             // TODO: Check once the shard threads become CPU bound, and distribute the workload across cores 4-14 inclusive (pass coreIndex by value)
@@ -47,8 +39,9 @@ class ShardManager {
         if(isIrrelevantMessageType(msg.header.messageType)) 
             return false;
         uint8_t queueIndex = getShardIndex(msg.header.stockLocate);
-        while(_queues[queueIndex].buffer.size() == _queues[queueIndex].buffer.capacity())
+        while(_queues[queueIndex].buffer.size() == _queues[queueIndex].buffer.capacity()) {
             std::this_thread::yield();
+        }
         _queues[queueIndex].buffer.push(msg);
         return true;
     }
@@ -96,7 +89,7 @@ class ShardManager {
 
     /**
      * Should be incremented by two, per consumer thread. For MY MACHINE:
-     * Main thread: cpu 2 (or maybe 16, first E-core. Subject to test)
+     * Main thread: cpu 2
      * Consumer 1: cpu 4
      * Consumer N: 2*N + 4
      * My machine has 8 hyperthreaded core families, so 5 - 7 consumers seems optimal 

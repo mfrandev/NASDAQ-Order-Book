@@ -41,14 +41,9 @@ class PerStockOrderBook {
         PerStockOrderBook() { 
             _perStockOrderBook.reserve(PerStockOrderBookConstants::RESERVE_ENTRIES);
             _perStockOrderBook.max_load_factor(0.7);
-            _perStockLedger.reserve(PerStockOrderBookConstants::RESERVE_ENTRIES / NUMBER_OF_SHARDS);
+            _perStockLedger.reserve(PerStockOrderBookConstants::RESERVE_ENTRIES);
             _perStockLedger.max_load_factor(0.7);
         }
-        ~PerStockOrderBook() = default;
-        PerStockOrderBook(const PerStockOrderBook&) = default;
-        PerStockOrderBook(PerStockOrderBook&&) noexcept = default;
-        PerStockOrderBook& operator=(const PerStockOrderBook&) = default;
-        PerStockOrderBook& operator=(PerStockOrderBook&&) noexcept = default;
 
 };
 
