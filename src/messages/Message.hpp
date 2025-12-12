@@ -64,8 +64,11 @@ struct MessageBody {
 };
 
 struct Message {
+    uint64_t seq;
     MessageHeader header;
     MessageBody body;
 };
+
+static_assert(sizeof(Message) <= 64);
 
 #endif // MESSASGE_UNION_H_

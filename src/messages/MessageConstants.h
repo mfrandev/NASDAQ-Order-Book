@@ -5,7 +5,7 @@
 
 constexpr size_t NUMBER_OF_BYTES_FOR_HEADER_CHUNK          = 13;
 constexpr size_t NUMBER_OF_BYTES_OFFSET_FOR_HEADER_CHUNK   = 2;
-constexpr size_t MAX_BUFFER_SIZE = 48;
+constexpr size_t MAX_BUFFER_SIZE = 40;
 
 constexpr char PRINTABLE = 'Y';
 constexpr char NON_PRINTABLE = 'N';

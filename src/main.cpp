@@ -43,10 +43,12 @@ int main(int argc, char* argv[]) {
         ShardManager<NUMBER_OF_SHARDS, SHARD_SIZE> shardManager; // Default constructed, class itself knows all capacity values
         shardManager.start();
         // uint32_t counter = 0;
+        uint64_t messageSequenceCounter = 0;
         while(file) {
 
             BinaryMessageWrapper wrappedMessage;
 
+            wrappedMessage.seq = messageSequenceCounter;
             // For some reason, there happens to be two leading bytes at the start of each line
             file.read(wrappedMessage.buffer, NUMBER_OF_BYTES_FOR_HEADER_CHUNK);
             wrappedMessage.header = parseHeader(&wrappedMessage.buffer[NUMBER_OF_BYTES_OFFSET_FOR_HEADER_CHUNK]);
@@ -55,7 +57,8 @@ int main(int argc, char* argv[]) {
             // Now ready to add to queue
 
             shardManager.dispatch(std::move(wrappedMessage));
-            // counter++;
+            // ++counter;
+            ++messageSequenceCounter;
         }
         // Close file
         file.close();

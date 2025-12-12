@@ -11,6 +11,8 @@
 
 #include <message_utils.hpp>
 
+#include <ProcessSystemEvent.hpp>
+
 template<uint8_t numberOfShards, uint32_t shardSize>
 class ShardManager {
 
@@ -29,7 +31,8 @@ class ShardManager {
                 std::ref(_queues[i]), 
                 coreIndex, 
                 std::ref(_orderBook),
-                std::ref(_symbols)
+                std::ref(_symbols),
+                std::ref(_systemEventSequenceTracker)
             );
             coreIndex += 2;
         }
@@ -38,6 +41,15 @@ class ShardManager {
     bool dispatch(BinaryMessageWrapper&& msg) {
         if(isIrrelevantMessageType(msg.header.messageType)) 
             return false;
+
+        // ==================== System event handling must be apply across all shards ====================
+        if(msg.header.messageType == MessageTypes::MESSAGE_TYPE_SYSTEM_EVENT) {
+            // Move is safe since msg is never used again in this function
+            processSystemEvent(std::move(msg), std::ref(_systemEventSequenceTracker));
+            return true;
+        }
+
+        // ==================== For shard-handled messages ====================
         uint8_t queueIndex = getShardIndex(msg.header.stockLocate);
         while(_queues[queueIndex].buffer.size() == _queues[queueIndex].buffer.capacity()) {
             std::this_thread::yield();
@@ -81,6 +93,8 @@ class ShardManager {
     OrderBook _orderBook;
 
     std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE> _symbols;
+
+    SystemEventSequence _systemEventSequenceTracker;
 
     template<size_t... I>
     static std::array<queue_type, numberOfShards> make_queues(std::index_sequence<I...>) {

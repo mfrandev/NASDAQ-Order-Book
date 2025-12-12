@@ -13,6 +13,8 @@
 #include <Message.hpp>
 #include <PerStockOrderBook.h>
 
+#include <SystemEventSequence.h>
+
 #include <iostream>
 // Global counter tracking how many messages consumers have processed
 // inline std::atomic<uint64_t> numMessages{0};
@@ -58,7 +60,7 @@ class ShardConsumer {
                 case MessageTypes::MESSAGE_TYPE_TRADE_BROKEN:
                 return MessageBody {
                     .tag = MessageTag::BrokenTradeOrOrderExecution,
-                    .brokenTradeOrOrderExecution =parseBrokenTradeOrOrderExecutionBody(buffer)
+                    .brokenTradeOrOrderExecution = parseBrokenTradeOrOrderExecutionBody(buffer)
                 };
 
                 case MessageTypes::MESSAGE_TYPE_ORDER_CANCELLED:
@@ -136,22 +138,38 @@ class ShardConsumer {
             switch(message.body.tag) {
 
                 // ======================= Order Book Mutation Message Handlers =======================
-                case MessageTag::AddOrder:   
+                case MessageTag::AddOrder: 
+                    if(message.seq < _systemEventSequenceTracker->startOfSystemHoursSeq.load(std::memory_order_acquire) 
+                    || message.seq > _systemEventSequenceTracker->endOfSystemHoursSeq.load(std::memory_order_acquire)) {
+                        break;
+                    }
                     orderBook -> addOrder(message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
                     break;
 
-                case MessageTag::AddOrderWithMPID:      
-                    orderBook -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);   
+                case MessageTag::AddOrderWithMPID:  
+                    if(message.seq < _systemEventSequenceTracker->startOfSystemHoursSeq.load(std::memory_order_acquire) 
+                    || message.seq > _systemEventSequenceTracker->endOfSystemHoursSeq.load(std::memory_order_acquire)) {
+                        break;
+                    }
+                    orderBook -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);  
                     break;
                 
                 case MessageTag::OrderExecuted:
+                    if(message.seq < _systemEventSequenceTracker->startOfMarketHoursSeq.load(std::memory_order_acquire) 
+                    || message.seq > _systemEventSequenceTracker->endOfMarketHoursSeq.load(std::memory_order_acquire)) {
+                        break;
+                    }
                     orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);              
                     break;
 
-                case MessageTag::OrderExecutedWithPrice: 
+                case MessageTag::OrderExecutedWithPrice:
+                    if(message.seq < _systemEventSequenceTracker->startOfMarketHoursSeq.load(std::memory_order_acquire) 
+                    || message.seq > _systemEventSequenceTracker->endOfMarketHoursSeq.load(std::memory_order_acquire)) {
+                        break; 
+                    }
                     orderBook -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
-                    // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) // Do VWAP;
-                    // TODO: since printable, account for VWAP here
+                    // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) 
+                        // Do VWAP;
                     break;
 
                 case MessageTag::OrderCancel:
@@ -165,11 +183,11 @@ class ShardConsumer {
                 case MessageTag::OrderReplace:      
                     orderBook -> replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
                     break;
-
-                // ======================= System State Admin Message Handlers =======================
                 
+                // 
+
                 default:
-                break;
+                    break;
             }
         }
 
@@ -177,12 +195,13 @@ class ShardConsumer {
         queue_type* _queue = nullptr;
         OrderBook* _orderBook = nullptr;
         Symbols* _symbols = nullptr;
+        SystemEventSequence* _systemEventSequenceTracker = nullptr;
 
     public:
 
         std::atomic<bool> finished{false};
 
-        void run(queue_type& queue, int run_on_this_core, OrderBook& orderBook, Symbols& symbols) {
+        void run(queue_type& queue, int run_on_this_core, OrderBook& orderBook, Symbols& symbols, SystemEventSequence& systemEventSequenceTracker) {
 
             std::cout << run_on_this_core << std::endl;
     
@@ -195,6 +214,7 @@ class ShardConsumer {
                 _queue = &queue;
                 _orderBook = &orderBook;
                 _symbols = &symbols;
+                _systemEventSequenceTracker = &systemEventSequenceTracker;
             }
 
             while(!finished.load()) {
@@ -203,7 +223,7 @@ class ShardConsumer {
                     queue.buffer.pop();
                     // numMessages.fetch_add(1, std::memory_order_relaxed);
                     MessageBody msgBody = parseMessage(bmsg.header.messageType, bmsg.header.stockLocate, bmsg.buffer);
-                    processMessage(Message{bmsg.header, msgBody});
+                    processMessage(Message{bmsg.seq, bmsg.header, msgBody});
                 } else {
                     // backoff();
                     std::this_thread::yield();
