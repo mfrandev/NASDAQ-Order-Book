@@ -22,7 +22,7 @@ class PerStockLedger {
             _perStockLedger.max_load_factor(0.7);
         }
 
-        void addExecutedTradeToLedger(uint32_t price, uint64_t numShares, uint64_t matchNumber);
+        void addExecutedTradeToLedger(bool countedInMetrics, uint32_t price, uint64_t numShares, uint64_t matchNumber);
         void dump(std::ostream& os) const;
 
 };

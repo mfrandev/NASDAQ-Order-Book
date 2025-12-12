@@ -1,10 +1,19 @@
 #include <PerStockLedger.h>
+
 #include <algorithm>
 
-void PerStockLedger::addExecutedTradeToLedger(uint32_t price, uint64_t numShares, uint64_t matchNumber) {
+#include <string_utils.hpp>
+
+void PerStockLedger::addExecutedTradeToLedger(bool countedInMetrics, uint32_t price, uint64_t numShares, uint64_t matchNumber) {
     PerStockLedgerEntry& entry = _perStockLedger[matchNumber];
-    entry.notionalPrice += (price * numShares);
-    entry.numShares += numShares;
+    __uint128_t notional = static_cast<__uint128_t>(price) * numShares;
+    entry.totalNotionalPrice += notional;
+    entry.totalShares += numShares;
+
+    if(countedInMetrics) {
+        entry.vwapNotionalPrice += notional;
+        entry.vwapShares += numShares;
+    }
 }
 
 void PerStockLedger::dump(std::ostream& os) const {
@@ -17,6 +26,6 @@ void PerStockLedger::dump(std::ostream& os) const {
 
     os << "=== Executed Trades Ledger (" << ledger.size() << ") ===\n";
     for (const auto& [matchNumber, entry] : ledger) {
-        os << "matchNumber=" << matchNumber << " price=" << (entry.notionalPrice / entry.numShares) << " shares=" << entry.numShares << '\n';
+        os << "matchNumber=" << matchNumber << " price=" << uint128_t_to_string(entry.totalNotionalPrice / entry.totalShares) << " shares=" << entry.totalShares << '\n';
     }
 }

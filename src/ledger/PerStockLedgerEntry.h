@@ -3,9 +3,16 @@
 
 #include <cstdint>
 
+// VWAP fields are updated only for executions that represent public prints.
+// Non-printable executions still update total execution fields for rollback.
 struct PerStockLedgerEntry {
-    uint32_t notionalPrice;
-    uint64_t numShares;
+    uint64_t totalShares;
+    uint64_t vwapShares;
+
+    __uint128_t totalNotionalPrice;
+    __uint128_t vwapNotionalPrice;
 };
+
+static_assert(sizeof(PerStockLedgerEntry) == 48);
 
 #endif // PER_STOCK_LEDGER_ENTRY_H_

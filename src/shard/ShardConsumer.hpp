@@ -169,6 +169,7 @@ class ShardConsumer {
                         break;
                     }
                     ledger -> addExecutedTradeToLedger(
+                        true, // Include in VWAP metrics 
                         // Order book call returns execution price
                         orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber), 
                         message.body.orderExecuted.executedShares, 
@@ -182,8 +183,13 @@ class ShardConsumer {
                         break; 
                     }
                     orderBook -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
-                    ledger -> addExecutedTradeToLedger(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.matchNumber);
-                    // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) 
+                    ledger -> addExecutedTradeToLedger(
+                        message.body.orderExecutedWithPrice.printable == PRINTABLE,
+                        message.body.orderExecutedWithPrice.executionPrice, 
+                        message.body.orderExecutedWithPrice.executedShares, 
+                        message.body.orderExecutedWithPrice.matchNumber
+                    );
+                    // if( == PRINTABLE) 
                         // Do VWAP;
                     break;
 
