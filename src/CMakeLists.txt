@@ -7,6 +7,7 @@ include_directories(
     "./orderbook"
     "./utils"
     "./shard"
+    "./events"
 )
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
