@@ -30,7 +30,7 @@ class ShardManager {
                 &_shards[i], 
                 std::ref(_queues[i]), 
                 coreIndex, 
-                std::ref(_orderBook),
+                std::ref(_locateIndexedPerStockState),
                 std::ref(_symbols),
                 std::ref(_systemEventSequenceTracker)
             );
@@ -59,13 +59,17 @@ class ShardManager {
     }
 
     void dumpOrderBooks(std::ostream& os) const {
-        for (size_t i = 0; i < _orderBook.size(); ++i) {
-            const auto& ptr = _orderBook[i];
-            if (!ptr) {
+        for (size_t i = 0; i < _locateIndexedPerStockState.size(); ++i) {
+            const auto& orderBookPtr = _locateIndexedPerStockState[i].orderBook;
+            const auto& ledgerPtr = _locateIndexedPerStockState[i].ledger;
+            if (!orderBookPtr && !ledgerPtr) {
                 continue;
             }
             os << "===== Stock Locate " << i << " =====\n";
-            ptr->dump(os);
+            if(orderBookPtr)
+                orderBookPtr->dump(os);
+            if(ledgerPtr)
+                ledgerPtr->dump(os);
         }
     }
 
@@ -89,8 +93,7 @@ class ShardManager {
     // One queue per-shard
     std::array<queue_type, numberOfShards> _queues;
 
-    // One order book, becuase no two threads will ever index the same stock locate
-    OrderBook _orderBook;
+    LocateIndexedPerStockState _locateIndexedPerStockState;
 
     std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE> _symbols;
 

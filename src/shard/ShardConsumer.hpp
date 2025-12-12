@@ -11,6 +11,8 @@
 #include <thread_utils.hpp>
 #include <queue_wrapper.h>
 #include <Message.hpp>
+
+#include <PerStockLedger.h>
 #include <PerStockOrderBook.h>
 
 #include <SystemEventSequence.h>
@@ -19,7 +21,12 @@
 // Global counter tracking how many messages consumers have processed
 // inline std::atomic<uint64_t> numMessages{0};
 
-using OrderBook = std::array<std::unique_ptr<PerStockOrderBook>, PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
+struct PerStockState {
+    std::unique_ptr<PerStockOrderBook> orderBook;
+    std::unique_ptr<PerStockLedger> ledger;
+};
+
+using LocateIndexedPerStockState = std::array<PerStockState, PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
 using Symbols = std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
 
 class ShardConsumer {
@@ -95,7 +102,8 @@ class ShardConsumer {
 
                 case MessageTypes::MESSAGE_TYPE_STOCK_DIRECTORY:
                 // Initialize this stock locate 
-                (*_orderBook)[stockLocate] = std::make_unique<PerStockOrderBook>();
+                (*_locateIndexedPerStockState)[stockLocate].orderBook = std::make_unique<PerStockOrderBook>();
+                (*_locateIndexedPerStockState)[stockLocate].ledger = std::make_unique<PerStockLedger>();
                 return MessageBody {
                     .tag = MessageTag::StockDirectory,
                     .stockDirectory = parseStockDirectoryBody((*_symbols)[stockLocate], buffer)
@@ -134,7 +142,8 @@ class ShardConsumer {
 
 
         void processMessage(Message&& message) {
-            std::unique_ptr<PerStockOrderBook>& orderBook = (*_orderBook)[message.header.stockLocate];
+            std::unique_ptr<PerStockOrderBook>& orderBook = (*_locateIndexedPerStockState)[message.header.stockLocate].orderBook;
+            std::unique_ptr<PerStockLedger>& ledger = (*_locateIndexedPerStockState)[message.header.stockLocate].ledger;
             switch(message.body.tag) {
 
                 // ======================= Order Book Mutation Message Handlers =======================
@@ -159,7 +168,12 @@ class ShardConsumer {
                     || message.seq > _systemEventSequenceTracker->endOfMarketHoursSeq.load(std::memory_order_acquire)) {
                         break;
                     }
-                    orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);              
+                    ledger -> addExecutedTradeToLedger(
+                        // Order book call returns execution price
+                        orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber), 
+                        message.body.orderExecuted.executedShares, 
+                        message.body.orderExecuted.matchNumber
+                    );
                     break;
 
                 case MessageTag::OrderExecutedWithPrice:
@@ -168,6 +182,7 @@ class ShardConsumer {
                         break; 
                     }
                     orderBook -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
+                    ledger -> addExecutedTradeToLedger(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.matchNumber);
                     // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) 
                         // Do VWAP;
                     break;
@@ -193,7 +208,7 @@ class ShardConsumer {
 
         // Non-owning pattern. Guaranteed that lifetime of shard manager object outlives this consumer object 100% of the time
         queue_type* _queue = nullptr;
-        OrderBook* _orderBook = nullptr;
+        LocateIndexedPerStockState* _locateIndexedPerStockState = nullptr;
         Symbols* _symbols = nullptr;
         SystemEventSequence* _systemEventSequenceTracker = nullptr;
 
@@ -201,7 +216,7 @@ class ShardConsumer {
 
         std::atomic<bool> finished{false};
 
-        void run(queue_type& queue, int run_on_this_core, OrderBook& orderBook, Symbols& symbols, SystemEventSequence& systemEventSequenceTracker) {
+        void run(queue_type& queue, int run_on_this_core, LocateIndexedPerStockState& locateIndexedPerStockState, Symbols& symbols, SystemEventSequence& systemEventSequenceTracker) {
 
             std::cout << run_on_this_core << std::endl;
     
@@ -212,7 +227,7 @@ class ShardConsumer {
             // Set shard level data structure objects
             {
                 _queue = &queue;
-                _orderBook = &orderBook;
+                _locateIndexedPerStockState = &locateIndexedPerStockState;
                 _symbols = &symbols;
                 _systemEventSequenceTracker = &systemEventSequenceTracker;
             }

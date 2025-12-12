@@ -8,6 +8,7 @@ include_directories(
     "./utils"
     "./shard"
     "./events"
+    "./ledger"
 )
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS

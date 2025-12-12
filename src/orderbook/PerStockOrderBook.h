@@ -5,7 +5,6 @@
 #include <ostream>
 
 #include <PerStockOrderBookEntry.h>
-#include <PerStockLedgerEntry.h>
 #include <PerStockOrderBookConstants.h>
 #include <ThreadConstants.h>
 
@@ -14,18 +13,13 @@ class PerStockOrderBook {
     // orderReferencenumber -> entry
     using PerStockOrderBookMap = ankerl::unordered_dense::map<uint64_t, PerStockOrderBookEntry>;
 
-    // matchNumber -> entry
-    using PerStockLedger = ankerl::unordered_dense::map<uint64_t, PerStockLedgerEntry>;
-
     private:
 
         PerStockOrderBookMap _perStockOrderBook;
-        PerStockLedger _perStockLedger;
 
         void _addOrderToOrderBook(uint32_t shares, uint32_t price, uint64_t orderReferenceNumber);
         void _removeOrderFromOrderBook(uint64_t orderReferenceNumber);
         void _replaceKeyInOrderBook(uint64_t oldOrderReferenceNumber, uint64_t newOrderReferenceNumber);
-        void _addExecutedTradeToLedger(uint32_t price, uint64_t numShares, uint64_t matchNumber);
 
     public:    
 
@@ -41,8 +35,6 @@ class PerStockOrderBook {
         PerStockOrderBook() { 
             _perStockOrderBook.reserve(PerStockOrderBookConstants::RESERVE_ENTRIES);
             _perStockOrderBook.max_load_factor(0.7);
-            _perStockLedger.reserve(PerStockOrderBookConstants::RESERVE_ENTRIES);
-            _perStockLedger.max_load_factor(0.7);
         }
 
 };
