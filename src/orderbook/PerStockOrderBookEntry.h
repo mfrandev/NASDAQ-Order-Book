@@ -4,8 +4,8 @@
 #include <cstdint>
 
 struct PerStockOrderBookEntry {
-    uint32_t shares;
-    uint32_t price;
+    uint32_t shares{0};
+    uint32_t price{0};
 };
 
 #endif // PER_STOCK_ORDER_BOOK_ENTRY_H_

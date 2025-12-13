@@ -16,6 +16,19 @@ void PerStockLedger::addExecutedTradeToLedger(bool countedInMetrics, uint32_t pr
     }
 }
 
+PerStockVWAPCorrection PerStockLedger::handleBrokenTradeOrOrderExecution(uint64_t matchNumber) {
+    auto ledgerIterator = _perStockLedger.find(matchNumber);
+    if(ledgerIterator == _perStockLedger.end())
+        return PerStockVWAPCorrection{0, 0};
+    PerStockLedgerEntry& entry = ledgerIterator -> second;
+    PerStockVWAPCorrection correction {
+        entry.vwapShares,
+        entry.vwapNotionalPrice
+    };
+    _perStockLedger.erase(ledgerIterator);
+    return correction;
+}
+
 void PerStockLedger::dump(std::ostream& os) const {
     std::vector<std::pair<uint64_t, PerStockLedgerEntry>> ledger;
     ledger.reserve(_perStockLedger.size());
@@ -26,6 +39,10 @@ void PerStockLedger::dump(std::ostream& os) const {
 
     os << "=== Executed Trades Ledger (" << ledger.size() << ") ===\n";
     for (const auto& [matchNumber, entry] : ledger) {
-        os << "matchNumber=" << matchNumber << " price=" << uint128_t_to_string(entry.totalNotionalPrice / entry.totalShares) << " shares=" << entry.totalShares << '\n';
+        const auto shares = entry.totalShares;
+        const std::string priceStr = (shares == 0)
+            ? "0"
+            : uint128_t_to_string(entry.totalNotionalPrice / static_cast<__uint128_t>(shares));
+        os << "matchNumber=" << matchNumber << " price=" << priceStr << " shares=" << shares << '\n';
     }
 }

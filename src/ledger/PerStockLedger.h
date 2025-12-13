@@ -4,6 +4,7 @@
 #include <ankerl/unordered_dense.h>
 #include <ostream>
 
+#include <PerStockVWAPCorrection.h>
 #include <PerStockLedgerEntry.h>
 #include <PerStockLedgerConstants.h>
 
@@ -23,6 +24,7 @@ class PerStockLedger {
         }
 
         void addExecutedTradeToLedger(bool countedInMetrics, uint32_t price, uint64_t numShares, uint64_t matchNumber);
+        PerStockVWAPCorrection handleBrokenTradeOrOrderExecution(uint64_t matchNumber);
         void dump(std::ostream& os) const;
 
 };

@@ -21,6 +21,7 @@ target_link_libraries(nasdaq_order_book_mpmc PRIVATE unordered_dense::unordered_
 target_compile_options(
     nasdaq_order_book_mpmc
     PRIVATE
+        # $<$<CONFIG:Debug>:-O0 -g3 -fno-omit-frame-pointer>
         -march=native # for __sync_val_compare_and_swap
         --param=destructive-interference-size=64
 )
