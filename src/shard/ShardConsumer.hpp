@@ -15,6 +15,8 @@
 
 #include <PerStockLedger.h>
 #include <PerStockOrderBook.h>
+#include <PerStockVWAP.h>
+#include <VWAPAccumulator.hpp>
 
 #include <SystemEventSequence.h>
 
@@ -25,6 +27,7 @@
 struct PerStockState {
     std::unique_ptr<PerStockOrderBook> orderBook;
     std::unique_ptr<PerStockLedger> ledger;
+    PerStockVWAP vwap;
 };
 
 using LocateIndexedPerStockState = std::array<PerStockState, PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
@@ -145,6 +148,7 @@ class ShardConsumer {
         void processMessage(Message&& message) {
             std::unique_ptr<PerStockOrderBook>& orderBook = (*_locateIndexedPerStockState)[message.header.stockLocate].orderBook;
             std::unique_ptr<PerStockLedger>& ledger = (*_locateIndexedPerStockState)[message.header.stockLocate].ledger;
+            PerStockVWAP& vwap = (*_locateIndexedPerStockState)[message.header.stockLocate].vwap;
             switch(message.body.tag) {
 
                 // ======================= Order Book Mutation Message Handlers (Minmally) =======================
@@ -159,18 +163,22 @@ class ShardConsumer {
                     break;
                 
                 case MessageTag::OrderExecuted:
-                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                    // Do order book here
-                    ledger -> addExecutedTradeToLedger(
-                        true, // Include in VWAP metrics, since non-printable option does not exist 
-                        // Order book call returns execution price 
-                        orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber), 
-                        message.body.orderExecuted.executedShares, 
-                        message.body.orderExecuted.matchNumber
-                    );
-                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
-                    // Do VWAP here
-                    break;
+                    {
+                        if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                        // Do order book here
+                        uint32_t price = orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);
+                        ledger -> addExecutedTradeToLedger(
+                            true, // Include in VWAP metrics, since non-printable option does not exist 
+                            // Order book call returns execution price 
+                            price, 
+                            message.body.orderExecuted.executedShares, 
+                            message.body.orderExecuted.matchNumber
+                        );
+                        if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                        // Accumulate VWAP
+                        accumulateVWAP(vwap, price, message.body.orderExecuted.executedShares);
+                        break;
+                    }
 
                 case MessageTag::OrderExecutedWithPrice:
                     if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
@@ -181,11 +189,9 @@ class ShardConsumer {
                         message.body.orderExecutedWithPrice.executedShares, 
                         message.body.orderExecutedWithPrice.matchNumber
                     );
-                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) {
-                        break; 
-                    }
-                    // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) 
-                        // Do VWAP;
+                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq) 
+                    || message.body.orderExecutedWithPrice.printable != PRINTABLE) break;
+                    accumulateVWAP(vwap, message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares);
                     break;
 
                 case MessageTag::OrderCancel:
@@ -213,6 +219,7 @@ class ShardConsumer {
                     );
                     if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                     // DO VWAP
+                    accumulateVWAP(vwap, message.body.tradeNonCross.price, message.body.tradeNonCross.shares);
                     break;
                 
                 case MessageTag::TradeCross:
@@ -224,12 +231,13 @@ class ShardConsumer {
                     );
                     if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                     // DO VWAP
+                    accumulateVWAP(vwap, message.body.tradeCross.crossPrice, message.body.tradeCross.crossShares);
                     break;
                 
                 case MessageTag::BrokenTradeOrOrderExecution: 
                     {
-                        PerStockVWAPCorrection corrective = ledger -> handleBrokenTradeOrOrderExecution(message.body.brokenTradeOrOrderExecution.matchNumber);
-                        // Adjust VWAP
+                        PerStockVWAPCorrection correction = ledger -> handleBrokenTradeOrOrderExecution(message.body.brokenTradeOrOrderExecution.matchNumber);
+                        correctVWAP(vwap, correction);
                         break;
                     }
 

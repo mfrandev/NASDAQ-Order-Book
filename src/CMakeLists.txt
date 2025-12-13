@@ -9,6 +9,7 @@ include_directories(
     "./shard"
     "./events"
     "./ledger"
+    "./vwap"
 )
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
