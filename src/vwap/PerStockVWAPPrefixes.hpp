@@ -7,19 +7,13 @@
 #include <algorithm>
 
 #include <PerStockVWAPConstants.h>
+#include <VWAPQueryResults.hpp>
 #include <PerStockVWAP.hpp>
 
 struct PerStockVWAPPrefix {
     uint64_t bucketStartNs{0};
     uint64_t numShares{0};
     __uint128_t notional{0};
-};
-
-struct VWAPIntervalQueryResult {
-    uint64_t startNs;
-    uint64_t endNs;
-    uint64_t numShares;
-    __uint128_t notional;
 };
 
 class PerStockVWAPPrefixHistory {

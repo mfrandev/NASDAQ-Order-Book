@@ -29,10 +29,22 @@ struct PerStockState {
     std::unique_ptr<PerStockLedger> ledger;
     PerStockVWAPPrefixHistory vwapPrefixes;
     PerStockVWAP vwap;
+
+    std::optional<VWAPIntervalQueryResult> queryVWAPInterval(uint64_t startNs, uint64_t endNs) {
+        return vwapPrefixes.queryInterval(startNs, endNs);
+    }
+
+    std::optional<VWAPIntervalQueryResult> queryLastNMinutesVWAP(uint64_t nowNs, uint64_t minutes) {
+        vwapPrefixes.maybeAdvanceVWAPBucket(nowNs, vwap);
+        uint64_t startNs = nowNs - (minutes * NANOSECOND_PER_MINUTE);
+        return queryVWAPInterval(startNs, nowNs);
+    }   
+
 };
 
 using LocateIndexedPerStockState = std::array<PerStockState, PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
 using Symbols = std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
+using Locates = ankerl::unordered_dense::map<std::string, uint16_t>;
 
 class ShardConsumer {
 
@@ -106,13 +118,19 @@ class ShardConsumer {
                 };
 
                 case MessageTypes::MESSAGE_TYPE_STOCK_DIRECTORY:
-                // Initialize this stock locate 
-                (*_locateIndexedPerStockState)[stockLocate].orderBook = std::make_unique<PerStockOrderBook>();
-                (*_locateIndexedPerStockState)[stockLocate].ledger = std::make_unique<PerStockLedger>();
-                return MessageBody {
-                    .tag = MessageTag::StockDirectory,
-                    .stockDirectory = parseStockDirectoryBody((*_symbols)[stockLocate], buffer)
-                };
+                {
+                    // Initialize this stock locate 
+                    (*_locateIndexedPerStockState)[stockLocate].orderBook = std::make_unique<PerStockOrderBook>();
+                    (*_locateIndexedPerStockState)[stockLocate].ledger = std::make_unique<PerStockLedger>();
+                    auto message = MessageBody {
+                        .tag = MessageTag::StockDirectory,
+                        .stockDirectory = parseStockDirectoryBody((*_symbols)[stockLocate], buffer)
+                    };
+                    std::string name = std::string((*_symbols)[stockLocate], 8);
+                    stripWhitespaceFromCPPString(name);
+                    _locates -> emplace(name, stockLocate);
+                    return message;
+                }
 
                 case MessageTypes::MESSAGE_TYPE_STOCK_TRADING_ACTION:
                 return MessageBody {
@@ -255,13 +273,14 @@ class ShardConsumer {
         queue_type* _queue = nullptr;
         LocateIndexedPerStockState* _locateIndexedPerStockState = nullptr;
         Symbols* _symbols = nullptr;
+        Locates* _locates = nullptr;
         SystemEventSequence* _systemEventSequenceTracker = nullptr;
 
     public:
 
         std::atomic<bool> finished{false};
 
-        void run(queue_type& queue, int run_on_this_core, LocateIndexedPerStockState& locateIndexedPerStockState, Symbols& symbols, SystemEventSequence& systemEventSequenceTracker) {
+        void run(queue_type& queue, int run_on_this_core, LocateIndexedPerStockState& locateIndexedPerStockState, Symbols& symbols, Locates& locates, SystemEventSequence& systemEventSequenceTracker) {
 
             std::cout << run_on_this_core << std::endl;
     
@@ -274,6 +293,7 @@ class ShardConsumer {
                 _queue = &queue;
                 _locateIndexedPerStockState = &locateIndexedPerStockState;
                 _symbols = &symbols;
+                _locates = &locates;
                 _systemEventSequenceTracker = &systemEventSequenceTracker;
             }
 
