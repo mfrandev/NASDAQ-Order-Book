@@ -68,7 +68,13 @@ int main(int argc, char* argv[]) {
         consoleLogger -> info("======== Total Order Book Management Time: {} seconds ========", static_cast<double>(std::chrono::duration_cast<std::chrono::seconds>(end - start).count()));
         consoleLogger->info("Joining Consumers..."); 
         shardManager.shutDownConsumers();    
-        consoleLogger->info("Consumers joined");    
+        consoleLogger->info("Consumers joined");  
+        
+        std::vector<std::string> query = {"AAPL", "XOM"};
+        auto result = shardManager.queryDayAndLastOneAndLastFiveMintues(query);
+        for(int i = 0; i < query.size(); ++i) {
+            std::cout << "Symbol: " << query[i] << " One: " << result[i][0] << " Five: " << result[i][1] << " Day: " << result[i][2] << std::endl;
+        }
         // std::cout << "===== Final Order Book Dump =====" << std::endl;
         // shardManager.dumpOrderBooks(std::cout);
     }

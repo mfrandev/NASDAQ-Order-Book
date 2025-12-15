@@ -6,7 +6,7 @@
 
 struct OrderExecutedWithPrice {
 
-    char printable; // This may be able to get removed
+    char printable; // Denotes publicly visible execution
     uint32_t executedShares;
     uint32_t executionPrice;
     uint64_t orderReferenceNumber;

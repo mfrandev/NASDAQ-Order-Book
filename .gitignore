@@ -15,3 +15,4 @@ build/
 # Ignore TODOs notes
 todos.txt
 
+sanity_check_*/

@@ -9,9 +9,14 @@
 
 #include <ThreadConstants.h>
 #include <thread_utils.hpp>
+#include <time_utils.hpp>
 #include <queue_wrapper.h>
 #include <Message.hpp>
+
+#include <PerStockLedger.h>
 #include <PerStockOrderBook.h>
+#include <PerStockVWAPPrefixes.hpp>
+#include <PerStockVWAP.hpp>
 
 #include <SystemEventSequence.h>
 
@@ -19,8 +24,27 @@
 // Global counter tracking how many messages consumers have processed
 // inline std::atomic<uint64_t> numMessages{0};
 
-using OrderBook = std::array<std::unique_ptr<PerStockOrderBook>, PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
+struct PerStockState {
+    std::unique_ptr<PerStockOrderBook> orderBook;
+    std::unique_ptr<PerStockLedger> ledger;
+    PerStockVWAPPrefixHistory vwapPrefixes;
+    PerStockVWAP vwap;
+
+    std::optional<VWAPIntervalQueryResult> queryVWAPInterval(uint64_t startNs, uint64_t endNs) {
+        return vwapPrefixes.queryInterval(startNs, endNs);
+    }
+
+    std::optional<VWAPIntervalQueryResult> queryLastNMinutesVWAP(uint64_t nowNs, uint64_t minutes) {
+        vwapPrefixes.maybeAdvanceVWAPBucket(nowNs, vwap);
+        uint64_t startNs = nowNs - (minutes * NANOSECOND_PER_MINUTE);
+        return queryVWAPInterval(startNs, nowNs);
+    }   
+
+};
+
+using LocateIndexedPerStockState = std::array<PerStockState, PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
 using Symbols = std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
+using Locates = ankerl::unordered_dense::map<std::string, uint16_t>;
 
 class ShardConsumer {
 
@@ -94,12 +118,19 @@ class ShardConsumer {
                 };
 
                 case MessageTypes::MESSAGE_TYPE_STOCK_DIRECTORY:
-                // Initialize this stock locate 
-                (*_orderBook)[stockLocate] = std::make_unique<PerStockOrderBook>();
-                return MessageBody {
-                    .tag = MessageTag::StockDirectory,
-                    .stockDirectory = parseStockDirectoryBody((*_symbols)[stockLocate], buffer)
-                };
+                {
+                    // Initialize this stock locate 
+                    (*_locateIndexedPerStockState)[stockLocate].orderBook = std::make_unique<PerStockOrderBook>();
+                    (*_locateIndexedPerStockState)[stockLocate].ledger = std::make_unique<PerStockLedger>();
+                    auto message = MessageBody {
+                        .tag = MessageTag::StockDirectory,
+                        .stockDirectory = parseStockDirectoryBody((*_symbols)[stockLocate], buffer)
+                    };
+                    std::string name = std::string((*_symbols)[stockLocate], 8);
+                    stripWhitespaceFromCPPString(name);
+                    _locates -> emplace(name, stockLocate);
+                    return message;
+                }
 
                 case MessageTypes::MESSAGE_TYPE_STOCK_TRADING_ACTION:
                 return MessageBody {
@@ -132,59 +163,106 @@ class ShardConsumer {
             }
         }
 
-
         void processMessage(Message&& message) {
-            std::unique_ptr<PerStockOrderBook>& orderBook = (*_orderBook)[message.header.stockLocate];
+            std::unique_ptr<PerStockOrderBook>& orderBook = (*_locateIndexedPerStockState)[message.header.stockLocate].orderBook;
+            std::unique_ptr<PerStockLedger>& ledger = (*_locateIndexedPerStockState)[message.header.stockLocate].ledger;
+            PerStockVWAP& vwap = (*_locateIndexedPerStockState)[message.header.stockLocate].vwap;
+            PerStockVWAPPrefixHistory& vwapPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].vwapPrefixes;
             switch(message.body.tag) {
 
-                // ======================= Order Book Mutation Message Handlers =======================
+                // ======================= Order Book Mutation Message Handlers (Minmally) =======================
                 case MessageTag::AddOrder: 
-                    if(message.seq < _systemEventSequenceTracker->startOfSystemHoursSeq.load(std::memory_order_acquire) 
-                    || message.seq > _systemEventSequenceTracker->endOfSystemHoursSeq.load(std::memory_order_acquire)) {
-                        break;
-                    }
+                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderBook -> addOrder(message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
                     break;
 
                 case MessageTag::AddOrderWithMPID:  
-                    if(message.seq < _systemEventSequenceTracker->startOfSystemHoursSeq.load(std::memory_order_acquire) 
-                    || message.seq > _systemEventSequenceTracker->endOfSystemHoursSeq.load(std::memory_order_acquire)) {
-                        break;
-                    }
+                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderBook -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);  
                     break;
                 
                 case MessageTag::OrderExecuted:
-                    if(message.seq < _systemEventSequenceTracker->startOfMarketHoursSeq.load(std::memory_order_acquire) 
-                    || message.seq > _systemEventSequenceTracker->endOfMarketHoursSeq.load(std::memory_order_acquire)) {
+                    {
+                        if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                        // Do order book here
+                        uint32_t price = orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);
+                        ledger -> addExecutedTradeToLedger(
+                            true, // Include in VWAP metrics, since non-printable option does not exist 
+                            // Order book call returns execution price 
+                            price, 
+                            message.body.orderExecuted.executedShares, 
+                            message.body.orderExecuted.matchNumber
+                        );
+                        if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                        // Accumulate VWAP
+                        vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
+                        accumulateVWAP(vwap, price, message.body.orderExecuted.executedShares);
                         break;
                     }
-                    orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);              
-                    break;
 
                 case MessageTag::OrderExecutedWithPrice:
-                    if(message.seq < _systemEventSequenceTracker->startOfMarketHoursSeq.load(std::memory_order_acquire) 
-                    || message.seq > _systemEventSequenceTracker->endOfMarketHoursSeq.load(std::memory_order_acquire)) {
-                        break; 
-                    }
+                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderBook -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
-                    // if(message.body.orderExecutedWithPrice.printable == PRINTABLE) 
-                        // Do VWAP;
+                    ledger -> addExecutedTradeToLedger(
+                        message.body.orderExecutedWithPrice.printable == PRINTABLE,
+                        message.body.orderExecutedWithPrice.executionPrice, 
+                        message.body.orderExecutedWithPrice.executedShares, 
+                        message.body.orderExecutedWithPrice.matchNumber
+                    );
+                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq) 
+                    || message.body.orderExecutedWithPrice.printable != PRINTABLE) break;
+                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
+                    accumulateVWAP(vwap, message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares);
                     break;
 
                 case MessageTag::OrderCancel:
+                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderBook -> cancelOrder(message.body.orderCancel.cancelledShares, message.body.orderCancel.orderReferenceNumber);             
                     break;
 
                 case MessageTag::OrderDelete:
+                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderBook -> deleteOrder(message.body.orderDelete.orderReferenceNumber);                
                     break;
 
-                case MessageTag::OrderReplace:      
+                case MessageTag::OrderReplace:  
+                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;    
                     orderBook -> replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
                     break;
                 
-                // 
+                // ======================= Ledger Mutation Message Handlers (Which DO NOT Touch Order Book) =======================
+                case MessageTag::TradeNonCross:
+                    ledger -> addExecutedTradeToLedger(
+                        true, // This data is "printable"
+                        message.body.tradeNonCross.price,
+                        message.body.tradeNonCross.shares,
+                        message.body.tradeNonCross.matchNumber
+                    );
+                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                    // DO VWAP
+                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
+                    accumulateVWAP(vwap, message.body.tradeNonCross.price, message.body.tradeNonCross.shares);
+                    break;
+                
+                case MessageTag::TradeCross:
+                    ledger -> addExecutedTradeToLedger(
+                        true, // This data is "printable"
+                        message.body.tradeCross.crossPrice,
+                        message.body.tradeCross.crossShares,
+                        message.body.tradeCross.matchNumber
+                    );
+                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                    // DO VWAP
+                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
+                    accumulateVWAP(vwap, message.body.tradeCross.crossPrice, message.body.tradeCross.crossShares);
+                    break;
+                
+                case MessageTag::BrokenTradeOrOrderExecution: 
+                    {
+                        PerStockVWAPCorrection correction = ledger -> handleBrokenTradeOrOrderExecution(message.body.brokenTradeOrOrderExecution.matchNumber);
+                        correctVWAP(vwap, correction);
+                        break;
+                    }
 
                 default:
                     break;
@@ -193,15 +271,16 @@ class ShardConsumer {
 
         // Non-owning pattern. Guaranteed that lifetime of shard manager object outlives this consumer object 100% of the time
         queue_type* _queue = nullptr;
-        OrderBook* _orderBook = nullptr;
+        LocateIndexedPerStockState* _locateIndexedPerStockState = nullptr;
         Symbols* _symbols = nullptr;
+        Locates* _locates = nullptr;
         SystemEventSequence* _systemEventSequenceTracker = nullptr;
 
     public:
 
         std::atomic<bool> finished{false};
 
-        void run(queue_type& queue, int run_on_this_core, OrderBook& orderBook, Symbols& symbols, SystemEventSequence& systemEventSequenceTracker) {
+        void run(queue_type& queue, int run_on_this_core, LocateIndexedPerStockState& locateIndexedPerStockState, Symbols& symbols, Locates& locates, SystemEventSequence& systemEventSequenceTracker) {
 
             std::cout << run_on_this_core << std::endl;
     
@@ -212,8 +291,9 @@ class ShardConsumer {
             // Set shard level data structure objects
             {
                 _queue = &queue;
-                _orderBook = &orderBook;
+                _locateIndexedPerStockState = &locateIndexedPerStockState;
                 _symbols = &symbols;
+                _locates = &locates;
                 _systemEventSequenceTracker = &systemEventSequenceTracker;
             }
 
