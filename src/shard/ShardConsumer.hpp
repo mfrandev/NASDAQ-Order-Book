@@ -15,8 +15,8 @@
 
 #include <PerStockLedger.h>
 #include <PerStockOrderBook.h>
-#include <PerStockVWAP.h>
-#include <VWAPAccumulator.hpp>
+#include <PerStockVWAPPrefixes.hpp>
+#include <PerStockVWAP.hpp>
 
 #include <SystemEventSequence.h>
 
@@ -27,6 +27,7 @@
 struct PerStockState {
     std::unique_ptr<PerStockOrderBook> orderBook;
     std::unique_ptr<PerStockLedger> ledger;
+    PerStockVWAPPrefixHistory vwapPrefixes;
     PerStockVWAP vwap;
 };
 
@@ -144,11 +145,11 @@ class ShardConsumer {
             }
         }
 
-
         void processMessage(Message&& message) {
             std::unique_ptr<PerStockOrderBook>& orderBook = (*_locateIndexedPerStockState)[message.header.stockLocate].orderBook;
             std::unique_ptr<PerStockLedger>& ledger = (*_locateIndexedPerStockState)[message.header.stockLocate].ledger;
             PerStockVWAP& vwap = (*_locateIndexedPerStockState)[message.header.stockLocate].vwap;
+            PerStockVWAPPrefixHistory& vwapPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].vwapPrefixes;
             switch(message.body.tag) {
 
                 // ======================= Order Book Mutation Message Handlers (Minmally) =======================
@@ -176,6 +177,7 @@ class ShardConsumer {
                         );
                         if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                         // Accumulate VWAP
+                        vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
                         accumulateVWAP(vwap, price, message.body.orderExecuted.executedShares);
                         break;
                     }
@@ -191,6 +193,7 @@ class ShardConsumer {
                     );
                     if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq) 
                     || message.body.orderExecutedWithPrice.printable != PRINTABLE) break;
+                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
                     accumulateVWAP(vwap, message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares);
                     break;
 
@@ -219,6 +222,7 @@ class ShardConsumer {
                     );
                     if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                     // DO VWAP
+                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
                     accumulateVWAP(vwap, message.body.tradeNonCross.price, message.body.tradeNonCross.shares);
                     break;
                 
@@ -231,6 +235,7 @@ class ShardConsumer {
                     );
                     if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                     // DO VWAP
+                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
                     accumulateVWAP(vwap, message.body.tradeCross.crossPrice, message.body.tradeCross.crossShares);
                     break;
                 
