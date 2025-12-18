@@ -90,6 +90,7 @@ class PerStockVWAPPrefixHistory {
                 deltaNotional
             };
         }
+
 };
 
 #endif // PER_STOCK_VWAP_PREFIX_HISTORY_

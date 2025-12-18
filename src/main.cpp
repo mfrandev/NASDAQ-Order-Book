@@ -3,8 +3,12 @@
 #include <chrono>
 #include <iostream>
 
+#include <cliargs.h>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+
+#include <CLI11.hpp>
 
 #include <MessageHeader.hpp>
 #include <BinaryMessageWrapper.h>
@@ -36,11 +40,27 @@ int main(int argc, char* argv[]) {
         consoleLogger -> info("Failed to pin reader thread to core {}", readerThreadCore);
     }
 
+    // Parse CLI args here
+    CLIArgs cliArgs;
+    CLI::App app{"NASDAQ-Statistics-Engine"};
+    auto vwapFlag = app.add_flag("-v,--vwap", cliArgs.statistics.includeVWAP, "Include VWAP output");
+    app.add_option("--vwap-interval", cliArgs.intervals.intervalVWAP, "VWAP interval in minutes")
+        ->check(CLI::PositiveNumber)
+        ->default_val(cliArgs.intervals.intervalVWAP)
+        ->needs(vwapFlag);
+
+    try {
+        app.parse(argc, argv);
+    } catch(const CLI::ParseError &e) {
+        return app.exit(e);
+    }
+
     // Start execution timer
     auto start = std::chrono::system_clock::now();
 
     {
         ShardManager<NUMBER_OF_SHARDS, SHARD_SIZE> shardManager; // Default constructed, class itself knows all capacity values
+        shardManager.setCLIArgs(cliArgs);
         shardManager.start();
         // uint32_t counter = 0;
         uint64_t messageSequenceCounter = 0;
@@ -70,11 +90,6 @@ int main(int argc, char* argv[]) {
         shardManager.shutDownConsumers();    
         consoleLogger->info("Consumers joined");  
         
-        std::vector<std::string> query = {"AAPL", "XOM"};
-        auto result = shardManager.queryDayAndLastOneAndLastFiveMintues(query);
-        for(int i = 0; i < query.size(); ++i) {
-            std::cout << "Symbol: " << query[i] << " One: " << result[i][0] << " Five: " << result[i][1] << " Day: " << result[i][2] << std::endl;
-        }
         // std::cout << "===== Final Order Book Dump =====" << std::endl;
         // shardManager.dumpOrderBooks(std::cout);
     }
