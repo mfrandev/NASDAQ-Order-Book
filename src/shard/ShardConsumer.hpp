@@ -282,7 +282,7 @@ class ShardConsumer {
 
         void run(queue_type& queue, int run_on_this_core, LocateIndexedPerStockState& locateIndexedPerStockState, Symbols& symbols, Locates& locates, SystemEventSequence& systemEventSequenceTracker) {
 
-            std::cout << run_on_this_core << std::endl;
+            std::cout << "Pinned consumer " << (((run_on_this_core-ThreadConstants::FIRST_CONSUMER_CORE)/2)+1) << " to core " << run_on_this_core << std::endl;
     
             if(!pin_to_core(run_on_this_core)) {
                 std::cout << "Failed to pin consumer " << (((run_on_this_core-ThreadConstants::FIRST_CONSUMER_CORE)/2)+1) << " to core " << run_on_this_core << std::endl;

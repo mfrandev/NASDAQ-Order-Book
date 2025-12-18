@@ -6,7 +6,8 @@
 ITCHFiles/
 
 # Exclude everything in the LiveOutput folder, aside from vwap_placeholder.txt so git tracks the directory
-LiveOutput/vwap**
+LiveOutput/vwap/**
+!LiveOutput/vwap/vwap_placeholder.txt
 !LiveOutput/placeholder.txt
 
 # Don't push the build

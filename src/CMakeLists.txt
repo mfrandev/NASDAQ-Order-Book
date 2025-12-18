@@ -2,6 +2,7 @@ add_library(murmur3 STATIC ${CMAKE_CURRENT_SOURCE_DIR}/../lib/murmur3/murmur3.c)
 include_directories(
     "./../lib/murmur3"
     "./../lib/er"
+    "./../lib/CLI11"
     "."
     "./messages"
     "./orderstate"

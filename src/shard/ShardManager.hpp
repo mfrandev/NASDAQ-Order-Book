@@ -4,15 +4,25 @@
 #include <utility>
 #include <array>
 #include <iostream>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <cstdint>
 
 #include <ShardConsumer.hpp>
 #include <VWAPQueryResults.hpp>
 #include <BinaryMessageWrapper.h>
 #include <PerStockOrderState.h>
+#include <PerStockVWAPConstants.h>
 
 #include <message_utils.hpp>
+#include <string_utils.hpp>
 
 #include <ProcessSystemEvent.hpp>
+
+#include <cliargs.h>
 
 template<uint8_t numberOfShards, uint32_t shardSize>
 class ShardManager {
@@ -24,6 +34,8 @@ class ShardManager {
         {
             _locates.reserve(16'000UL);
         }
+
+    void setCLIArgs(CLIArgs args) noexcept { _args = args; }
 
     void start() {
         for(auto i = 0; i < numberOfShards; ++i) {
@@ -43,6 +55,10 @@ class ShardManager {
     }
 
     bool dispatch(BinaryMessageWrapper&& msg) {
+
+        if(_args.statistics.includeVWAP)
+            maybeOutputQueryForLastNMinutesVWAPForEachStock(msg.header.timestamp, _args.intervals.intervalVWAP);
+
         if(isIrrelevantMessageType(msg.header.messageType)) 
             return false;
 
@@ -91,22 +107,59 @@ class ShardManager {
         // std::cout << "Queue processed " << numMessages << " messages\n";
     }
 
-    std::vector<std::vector<double>> queryDayAndLastOneAndLastFiveMintues(std::vector<std::string> symbols) {
-        std::vector<std::vector<double>> result;
-        const uint64_t EOD = 57600000000000;
-        // const uint64_t SOD = 34200000000000;
-        for(auto& symbol: symbols) {
-            uint16_t stockLocate = _locates.at(symbol);
-            std::vector<double> oneFiveDayVWAPResults; 
-            auto one = _locateIndexedPerStockState[stockLocate].queryLastNMinutesVWAP(EOD, 2);
-            auto five = _locateIndexedPerStockState[stockLocate].queryLastNMinutesVWAP(EOD, 6);
-            auto day = _locateIndexedPerStockState[stockLocate].queryLastNMinutesVWAP(EOD, 391);
-            oneFiveDayVWAPResults.push_back(one == std::nullopt ? 0.d : vwapAsDouble(one.value()));
-            oneFiveDayVWAPResults.push_back(five == std::nullopt ? 0.d : vwapAsDouble(five.value()));
-            oneFiveDayVWAPResults.push_back(day == std::nullopt ? 0.d : vwapAsDouble(day.value()));
-            result.push_back(oneFiveDayVWAPResults);
+    // ======================== VWAP Output Helper Function ========================
+    void maybeOutputQueryForLastNMinutesVWAPForEachStock(uint64_t now, const uint64_t NMINUTES) {
+        if(!shouldEmitVWAPSnapshot(now, NMINUTES)) return;
+        const int FAIL = -1;
+        const uint64_t INTERVAL = static_cast<uint64_t>(NMINUTES) * NANOSECOND_PER_MINUTE;
+
+        auto toTimeString = [](uint64_t timestampNs, char delimiter) {
+            uint64_t totalSeconds = timestampNs / 1'000'000'000ULL;
+            uint64_t hours = totalSeconds / 3600;
+            uint64_t minutes = (totalSeconds % 3600) / 60;
+            uint64_t seconds = totalSeconds % 60;
+            std::ostringstream oss;
+            oss << std::setfill('0') << std::setw(2) << hours << delimiter
+                << std::setw(2) << minutes << delimiter
+                << std::setw(2) << seconds;
+            return oss.str();
+        };
+
+        std::cout << "Outputting last " << NMINUTES << " minutes vwap at " << toTimeString(now, ':') << std::endl;
+
+        std::filesystem::path outputDir{"../../LiveOutput/vwap"};
+        std::error_code ec;
+        std::filesystem::create_directories(outputDir, ec);
+        if(ec) {
+            std::cerr << "Failed to ensure VWAP output directory exists: " << ec.message() << '\n';
+            return;
         }
-        return result;
+
+        auto filename = std::string("vwap_") + toTimeString(now, '_') + ".csv";
+        std::ofstream output(outputDir / filename, std::ios::out | std::ios::trunc);
+        if(!output.is_open()) {
+            std::cerr << "Failed to open VWAP output file: " << filename << '\n';
+            return;
+        }
+
+        output << "ticker,vwap,start,end\n";
+        for(size_t locate = 0; locate < _locateIndexedPerStockState.size(); ++locate) {
+            PerStockState& state = _locateIndexedPerStockState[locate];
+            if(state.vwap.notional == 0) continue; // 0 notional implies no trading volume
+            state.vwapPrefixes.maybeAdvanceVWAPBucket(now, state.vwap);
+            auto queryResults = state.queryLastNMinutesVWAP(now, NMINUTES);
+            double vwap = queryResults == std::nullopt ? FAIL : vwapAsDouble(queryResults.value());
+
+            uint64_t intervalStart = queryResults == std::nullopt ? now - INTERVAL : queryResults->startNs;
+            uint64_t intervalEnd = queryResults == std::nullopt ? now : queryResults->endNs;
+
+            std::string symbol(_symbols[locate], MessageFieldSizes::STOCK_SIZE);
+            stripWhitespaceFromCPPString(symbol);
+
+            output << symbol << "," << vwap << ","
+                   << toTimeString(intervalStart, ':') << ","
+                   << toTimeString(intervalEnd, ':') << "\n";
+        }
     }
 
     private:
@@ -120,6 +173,9 @@ class ShardManager {
     std::array<queue_type, numberOfShards> _queues;
 
     LocateIndexedPerStockState _locateIndexedPerStockState;
+
+    uint64_t _lastVWAPIntervalEmitted = 0;
+    CLIArgs _args;
 
     std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderStateConstants::NUM_OF_STOCK_LOCATE> _symbols;
     ankerl::unordered_dense::map<std::string, uint16_t> _locates;
@@ -139,6 +195,21 @@ class ShardManager {
      * My machine has 8 hyperthreaded core families, so 5 - 7 consumers seems optimal 
      */
     int coreIndex;
+
+
+    // ======================== VWAP Output Helper Function ========================
+    bool shouldEmitVWAPSnapshot(uint64_t now, uint64_t INTERVAL_IN_MINUTES) {
+        constexpr uint64_t START_OF_TRADING_DAY_NS = 570ULL * NANOSECOND_PER_MINUTE; // 9:30 AM
+        constexpr uint64_t END_OF_TRADING_DAY_NS = 960ULL * NANOSECOND_PER_MINUTE; // 4:00 PM
+        uint64_t INTERVAL_NS = INTERVAL_IN_MINUTES * NANOSECOND_PER_MINUTE;
+        if(now < START_OF_TRADING_DAY_NS || now > END_OF_TRADING_DAY_NS) return false;
+
+        uint64_t intervalIndex = (now - START_OF_TRADING_DAY_NS) / INTERVAL_NS;
+        if(intervalIndex <= _lastVWAPIntervalEmitted) return false;
+
+        _lastVWAPIntervalEmitted = intervalIndex;
+        return true;
+    }
 
 };
 
