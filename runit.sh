@@ -1,2 +1,2 @@
 cd build/src
-./nasdaq_order_book_mpmc
+./nasdaq_statistics_engine

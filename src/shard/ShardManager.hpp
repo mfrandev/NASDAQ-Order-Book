@@ -8,7 +8,7 @@
 #include <ShardConsumer.hpp>
 #include <VWAPQueryResults.hpp>
 #include <BinaryMessageWrapper.h>
-#include <PerStockOrderBook.h>
+#include <PerStockOrderState.h>
 
 #include <message_utils.hpp>
 
@@ -62,16 +62,16 @@ class ShardManager {
         return true;
     }
 
-    void dumpOrderBooks(std::ostream& os) const {
+    void dumpOrderStates(std::ostream& os) const {
         for (size_t i = 0; i < _locateIndexedPerStockState.size(); ++i) {
-            const auto& orderBookPtr = _locateIndexedPerStockState[i].orderBook;
+            const auto& orderStatePtr = _locateIndexedPerStockState[i].orderState;
             const auto& ledgerPtr = _locateIndexedPerStockState[i].ledger;
-            if (!orderBookPtr && !ledgerPtr) {
+            if (!orderStatePtr && !ledgerPtr) {
                 continue;
             }
             os << "===== Stock Locate " << i << " =====\n";
-            if(orderBookPtr)
-                orderBookPtr->dump(os);
+            if(orderStatePtr)
+                orderStatePtr->dump(os);
             if(ledgerPtr)
                 ledgerPtr->dump(os);
         }
@@ -121,7 +121,7 @@ class ShardManager {
 
     LocateIndexedPerStockState _locateIndexedPerStockState;
 
-    std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE> _symbols;
+    std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderStateConstants::NUM_OF_STOCK_LOCATE> _symbols;
     ankerl::unordered_dense::map<std::string, uint16_t> _locates;
 
     SystemEventSequence _systemEventSequenceTracker;

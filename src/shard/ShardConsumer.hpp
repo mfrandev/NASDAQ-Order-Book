@@ -14,7 +14,7 @@
 #include <Message.hpp>
 
 #include <PerStockLedger.h>
-#include <PerStockOrderBook.h>
+#include <PerStockOrderState.h>
 #include <PerStockVWAPPrefixes.hpp>
 #include <PerStockVWAP.hpp>
 
@@ -25,7 +25,7 @@
 // inline std::atomic<uint64_t> numMessages{0};
 
 struct PerStockState {
-    std::unique_ptr<PerStockOrderBook> orderBook;
+    std::unique_ptr<PerStockOrderState> orderState;
     std::unique_ptr<PerStockLedger> ledger;
     PerStockVWAPPrefixHistory vwapPrefixes;
     PerStockVWAP vwap;
@@ -42,8 +42,8 @@ struct PerStockState {
 
 };
 
-using LocateIndexedPerStockState = std::array<PerStockState, PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
-using Symbols = std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderBookConstants::NUM_OF_STOCK_LOCATE>;
+using LocateIndexedPerStockState = std::array<PerStockState, PerStockOrderStateConstants::NUM_OF_STOCK_LOCATE>;
+using Symbols = std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderStateConstants::NUM_OF_STOCK_LOCATE>;
 using Locates = ankerl::unordered_dense::map<std::string, uint16_t>;
 
 class ShardConsumer {
@@ -120,7 +120,7 @@ class ShardConsumer {
                 case MessageTypes::MESSAGE_TYPE_STOCK_DIRECTORY:
                 {
                     // Initialize this stock locate 
-                    (*_locateIndexedPerStockState)[stockLocate].orderBook = std::make_unique<PerStockOrderBook>();
+                    (*_locateIndexedPerStockState)[stockLocate].orderState = std::make_unique<PerStockOrderState>();
                     (*_locateIndexedPerStockState)[stockLocate].ledger = std::make_unique<PerStockLedger>();
                     auto message = MessageBody {
                         .tag = MessageTag::StockDirectory,
@@ -164,31 +164,31 @@ class ShardConsumer {
         }
 
         void processMessage(Message&& message) {
-            std::unique_ptr<PerStockOrderBook>& orderBook = (*_locateIndexedPerStockState)[message.header.stockLocate].orderBook;
+            std::unique_ptr<PerStockOrderState>& orderState = (*_locateIndexedPerStockState)[message.header.stockLocate].orderState;
             std::unique_ptr<PerStockLedger>& ledger = (*_locateIndexedPerStockState)[message.header.stockLocate].ledger;
             PerStockVWAP& vwap = (*_locateIndexedPerStockState)[message.header.stockLocate].vwap;
             PerStockVWAPPrefixHistory& vwapPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].vwapPrefixes;
             switch(message.body.tag) {
 
-                // ======================= Order Book Mutation Message Handlers (Minmally) =======================
+                // ======================= Order State Mutation Message Handlers (Minmally) =======================
                 case MessageTag::AddOrder: 
                     if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                    orderBook -> addOrder(message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
+                    orderState -> addOrder(message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
                     break;
 
                 case MessageTag::AddOrderWithMPID:  
                     if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                    orderBook -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);  
+                    orderState -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);  
                     break;
                 
                 case MessageTag::OrderExecuted:
                     {
                         if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                        // Do order book here
-                        uint32_t price = orderBook -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);
+                        // Do order State here
+                        uint32_t price = orderState -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);
                         ledger -> addExecutedTradeToLedger(
                             true, // Include in VWAP metrics, since non-printable option does not exist 
-                            // Order book call returns execution price 
+                            // Order State call returns execution price 
                             price, 
                             message.body.orderExecuted.executedShares, 
                             message.body.orderExecuted.matchNumber
@@ -202,7 +202,7 @@ class ShardConsumer {
 
                 case MessageTag::OrderExecutedWithPrice:
                     if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                    orderBook -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
+                    orderState -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
                     ledger -> addExecutedTradeToLedger(
                         message.body.orderExecutedWithPrice.printable == PRINTABLE,
                         message.body.orderExecutedWithPrice.executionPrice, 
@@ -217,20 +217,20 @@ class ShardConsumer {
 
                 case MessageTag::OrderCancel:
                     if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                    orderBook -> cancelOrder(message.body.orderCancel.cancelledShares, message.body.orderCancel.orderReferenceNumber);             
+                    orderState -> cancelOrder(message.body.orderCancel.cancelledShares, message.body.orderCancel.orderReferenceNumber);             
                     break;
 
                 case MessageTag::OrderDelete:
                     if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                    orderBook -> deleteOrder(message.body.orderDelete.orderReferenceNumber);                
+                    orderState -> deleteOrder(message.body.orderDelete.orderReferenceNumber);                
                     break;
 
                 case MessageTag::OrderReplace:  
                     if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;    
-                    orderBook -> replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
+                    orderState -> replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
                     break;
                 
-                // ======================= Ledger Mutation Message Handlers (Which DO NOT Touch Order Book) =======================
+                // ======================= Ledger Mutation Message Handlers (Which DO NOT Touch Order State) =======================
                 case MessageTag::TradeNonCross:
                     ledger -> addExecutedTradeToLedger(
                         true, // This data is "printable"

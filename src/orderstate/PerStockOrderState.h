@@ -1,25 +1,25 @@
-#ifndef PER_STOCK_ORDER_BOOK_H_
-#define PER_STOCK_ORDER_BOOK_H_
+#ifndef PER_STOCK_ORDER_STATE_H_
+#define PER_STOCK_ORDER_STATE_H_
 
 #include <ankerl/unordered_dense.h>
 #include <ostream>
 
-#include <PerStockOrderBookEntry.h>
-#include <PerStockOrderBookConstants.h>
+#include <PerStockOrderStateEntry.h>
+#include <PerStockOrderStateConstants.h>
 #include <ThreadConstants.h>
 
-class PerStockOrderBook {
+class PerStockOrderState {
     
     // orderReferencenumber -> entry
-    using PerStockOrderBookMap = ankerl::unordered_dense::map<uint64_t, PerStockOrderBookEntry>;
+    using PerStockOrderStateMap = ankerl::unordered_dense::map<uint64_t, PerStockOrderStateEntry>;
 
     private:
 
-        PerStockOrderBookMap _perStockOrderBook;
+        PerStockOrderStateMap _perStockOrderState;
 
-        void _addOrderToOrderBook(uint32_t shares, uint32_t price, uint64_t orderReferenceNumber);
-        void _removeOrderFromOrderBook(uint64_t orderReferenceNumber);
-        void _replaceKeyInOrderBook(uint64_t oldOrderReferenceNumber, uint64_t newOrderReferenceNumber);
+        void _addOrderToOrderState(uint32_t shares, uint32_t price, uint64_t orderReferenceNumber);
+        void _removeOrderFromOrderState(uint64_t orderReferenceNumber);
+        void _replaceKeyInOrderState(uint64_t oldOrderReferenceNumber, uint64_t newOrderReferenceNumber);
 
     public:    
 
@@ -32,11 +32,11 @@ class PerStockOrderBook {
         void dump(std::ostream& os) const;
 
         // TODO: Determine if using optimal space reservation strategy
-        PerStockOrderBook() { 
-            _perStockOrderBook.reserve(PerStockOrderBookConstants::RESERVE_ENTRIES);
-            _perStockOrderBook.max_load_factor(0.7);
+        PerStockOrderState() { 
+            _perStockOrderState.reserve(PerStockOrderStateConstants::RESERVE_ENTRIES);
+            _perStockOrderState.max_load_factor(0.7);
         }
 
 };
 
-#endif // PER_STOCK_ORDER_BOOK_H_
+#endif // PER_STOCK_ORDER_STATE_H_
