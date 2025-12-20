@@ -1,16 +1,18 @@
 #ifndef CLI_ARGS_
 #define CLI_ARGS_
 
-struct Statistics {
+struct Metrics {
     bool includeVWAP = false;
+    bool includeTWAP = false;
 };
 
 struct Intervals {
     uint64_t intervalVWAP = 30;
+    uint64_t intervalTWAP = 30;
 };
 
 struct CLIArgs {
-    Statistics statistics;
+    Metrics metrics;
     Intervals intervals;
 };
 

@@ -9,6 +9,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 
 #include <CLI11.hpp>
+#include <memory>
 
 #include <MessageHeader.hpp>
 #include <BinaryMessageWrapper.h>
@@ -42,12 +43,17 @@ int main(int argc, char* argv[]) {
 
     // Parse CLI args here
     CLIArgs cliArgs;
-    CLI::App app{"NASDAQ-Statistics-Engine"};
-    auto vwapFlag = app.add_flag("-v,--vwap", cliArgs.statistics.includeVWAP, "Include VWAP output");
+    CLI::App app{"NASDAQ-Metrics-Engine"};
+    auto vwapFlag = app.add_flag("-v,--vwap", cliArgs.metrics.includeVWAP, "Include VWAP output");
     app.add_option("--vwap-interval", cliArgs.intervals.intervalVWAP, "VWAP interval in minutes")
         ->check(CLI::PositiveNumber)
         ->default_val(cliArgs.intervals.intervalVWAP)
         ->needs(vwapFlag);
+    auto twapFlag = app.add_flag("-t,--twap", cliArgs.metrics.includeTWAP, "Include TWAP output");
+    app.add_option("--twap-interval", cliArgs.intervals.intervalTWAP, "TWAP interval in minutes")
+        ->check(CLI::PositiveNumber)
+        ->default_val(cliArgs.intervals.intervalTWAP)
+        ->needs(twapFlag);
 
     try {
         app.parse(argc, argv);
@@ -59,9 +65,9 @@ int main(int argc, char* argv[]) {
     auto start = std::chrono::system_clock::now();
 
     {
-        ShardManager<NUMBER_OF_SHARDS, SHARD_SIZE> shardManager; // Default constructed, class itself knows all capacity values
-        shardManager.setCLIArgs(cliArgs);
-        shardManager.start();
+        std::unique_ptr<ShardManager<NUMBER_OF_SHARDS, SHARD_SIZE>> shardManager = std::make_unique<ShardManager<NUMBER_OF_SHARDS, SHARD_SIZE>>(); // Default constructed, class itself knows all capacity values
+        shardManager -> setCLIArgs(cliArgs);
+        shardManager -> start();
         // uint32_t counter = 0;
         uint64_t messageSequenceCounter = 0;
         while(file) {
@@ -76,7 +82,7 @@ int main(int argc, char* argv[]) {
             file.read(wrappedMessage.buffer, messageTypeToNumberOfBytes(wrappedMessage.header.messageType));
             // Now ready to add to queue
 
-            shardManager.dispatch(std::move(wrappedMessage));
+            shardManager -> dispatch(std::move(wrappedMessage));
             // ++counter;
             ++messageSequenceCounter;
         }
@@ -87,11 +93,11 @@ int main(int argc, char* argv[]) {
         // Convert nanos to seconds
         consoleLogger -> info("======== Total Order Book Management Time: {} seconds ========", static_cast<double>(std::chrono::duration_cast<std::chrono::seconds>(end - start).count()));
         consoleLogger->info("Joining Consumers..."); 
-        shardManager.shutDownConsumers();    
+        shardManager -> shutDownConsumers();    
         consoleLogger->info("Consumers joined");  
         
         // std::cout << "===== Final Order Book Dump =====" << std::endl;
-        // shardManager.dumpOrderBooks(std::cout);
+        // shardManager -> dumpOrderBooks(std::cout);
     }
 
     return 0;

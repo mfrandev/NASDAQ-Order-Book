@@ -11,6 +11,7 @@ include_directories(
     "./events"
     "./ledger"
     "./vwap"
+    "./twap"
 )
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
@@ -18,12 +19,13 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
 )
 
 # The compiled library code is here
-add_executable(nasdaq_statistics_engine ${SOURCES})
-target_link_libraries(nasdaq_statistics_engine PRIVATE unordered_dense::unordered_dense spdlog::spdlog murmur3)
+add_executable(nasdaq_metrics_engine ${SOURCES})
+target_link_libraries(nasdaq_metrics_engine PRIVATE unordered_dense::unordered_dense spdlog::spdlog murmur3)
 target_compile_options(
-    nasdaq_statistics_engine
+    nasdaq_metrics_engine
     PRIVATE
         # $<$<CONFIG:Debug>:-O0 -g3 -fno-omit-frame-pointer>
+        # -fsanitize=address,undefined
         -march=native # for __sync_val_compare_and_swap
         --param=destructive-interference-size=64
 )
