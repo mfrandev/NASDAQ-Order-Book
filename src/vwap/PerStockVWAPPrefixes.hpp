@@ -11,7 +11,7 @@
 #include <PerStockVWAP.hpp>
 
 struct PerStockVWAPPrefix {
-    uint64_t bucketStartNs{0};
+    uint64_t bucketKeyNs{0};
     uint64_t numShares{0};
     __uint128_t notional{0};
 };
@@ -20,7 +20,7 @@ class PerStockVWAPPrefixHistory {
 
     private:
         std::vector<PerStockVWAPPrefix> vwapPrefixes;
-        uint64_t currentBucketStartNs{0};
+        uint64_t currentBucketKeyNs{0};
 
         // Find the first VWAP
         PerStockVWAPPrefix findPrefixAtOrBeforeTimestamp(uint64_t timestamp) const {
@@ -30,7 +30,7 @@ class PerStockVWAPPrefixHistory {
                 vwapPrefixes.end(),
                 timestamp,
                 [](uint64_t t, const PerStockVWAPPrefix& item) {
-                    return t < item.bucketStartNs;
+                    return t < item.bucketKeyNs;
                 }
             );
             if(firstStrictlyGreaterThanTimestamp == vwapPrefixes.begin()) return {0, 0, 0};
@@ -40,38 +40,43 @@ class PerStockVWAPPrefixHistory {
 
     public:
         PerStockVWAPPrefixHistory() {
-            vwapPrefixes.reserve(VWAP_BUCKET_COUNT);
+            vwapPrefixes.reserve(VWAPConstants::VWAP_BUCKET_COUNT);
         }
 
         void maybeAdvanceVWAPBucket(uint64_t timestamp, const PerStockVWAP& liveVWAP) {
 
             // Get the start of the "true" current bucket for this message
-            uint64_t bucketStartNs = (timestamp / NANOSECOND_PER_MINUTE) * NANOSECOND_PER_MINUTE;
+            uint64_t bucketKeyNs = (timestamp / VWAPConstants::NANOSECOND_PER_MINUTE) * VWAPConstants::NANOSECOND_PER_MINUTE;
 
             // If current bucket start is unset (first bucket), set it and return
-            if(currentBucketStartNs == 0) {
-                currentBucketStartNs = bucketStartNs;
+            if(currentBucketKeyNs == 0) {
+                currentBucketKeyNs = bucketKeyNs;
                 return;
             }
 
             // If "current" bucket is moved on from, save the state for the previous prefix
-            if(currentBucketStartNs != bucketStartNs) {
+            if(currentBucketKeyNs != bucketKeyNs) {
                 vwapPrefixes.emplace_back(
-                    currentBucketStartNs,
+                    currentBucketKeyNs,
                     liveVWAP.numShares,
                     liveVWAP.notional
                 );
-                currentBucketStartNs = bucketStartNs;
+                currentBucketKeyNs = bucketKeyNs;
             }
         }
         
         void flush(const PerStockVWAP& liveVWAP) {
-            if(currentBucketStartNs == 0) return;
+            if(currentBucketKeyNs == 0) return;
             vwapPrefixes.emplace_back(
-                currentBucketStartNs,
+                currentBucketKeyNs,
                 liveVWAP.numShares,
                 liveVWAP.notional
             );
+        }
+
+        void processVWAPUpdate(uint32_t price, uint32_t shares, uint64_t timestamp, PerStockVWAP& vwap) {
+            maybeAdvanceVWAPBucket(timestamp, vwap);
+            accumulateVWAP(vwap, price, shares);
         }
 
         std::optional<VWAPIntervalQueryResult> queryInterval(uint64_t start, uint64_t end) const {
@@ -80,9 +85,9 @@ class PerStockVWAPPrefixHistory {
             PerStockVWAPPrefix intervalEnd = findPrefixAtOrBeforeTimestamp(end);
             if(intervalEnd.numShares < intervalStart.numShares) return std::nullopt;
             uint64_t deltaShares = intervalEnd.numShares - intervalStart.numShares;
+            if(deltaShares == 0) return std::nullopt;
             if(intervalEnd.notional < intervalStart.notional) return std::nullopt;
             __uint128_t deltaNotional = intervalEnd.notional - intervalStart.notional;
-            if(deltaShares == 0) return std::nullopt;
             return VWAPIntervalQueryResult {
                 start,
                 end,

@@ -1,2 +1,2 @@
 cd build/src
-./nasdaq_statistics_engine -v --vwap-interval 30
+./nasdaq_metrics_engine -v --vwap-interval 30  -t --twap-interval 30

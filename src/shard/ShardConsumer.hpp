@@ -18,6 +18,8 @@
 #include <PerStockVWAPPrefixes.hpp>
 #include <PerStockVWAP.hpp>
 
+#include <PerStockTWAPPrefixes.hpp>
+
 #include <SystemEventSequence.h>
 
 #include <iostream>
@@ -27,8 +29,12 @@
 struct PerStockState {
     std::unique_ptr<PerStockOrderState> orderState;
     std::unique_ptr<PerStockLedger> ledger;
+
     PerStockVWAPPrefixHistory vwapPrefixes;
     PerStockVWAP vwap;
+
+    PerStockTWAPPrefixHistory twapPrefixes;
+    PerStockTWAP twap;
 
     std::optional<VWAPIntervalQueryResult> queryVWAPInterval(uint64_t startNs, uint64_t endNs) {
         return vwapPrefixes.queryInterval(startNs, endNs);
@@ -36,9 +42,17 @@ struct PerStockState {
 
     std::optional<VWAPIntervalQueryResult> queryLastNMinutesVWAP(uint64_t nowNs, uint64_t minutes) {
         vwapPrefixes.maybeAdvanceVWAPBucket(nowNs, vwap);
-        uint64_t startNs = nowNs - (minutes * NANOSECOND_PER_MINUTE);
+        uint64_t startNs = nowNs - (minutes * VWAPConstants::NANOSECOND_PER_MINUTE);
         return queryVWAPInterval(startNs, nowNs);
-    }   
+    } 
+    
+    std::optional<TWAPIntervalQueryResult> queryLastNMniutesTWAP(uint64_t nowNs, uint64_t minutes) {
+        twapPrefixes.maybeAdvanceTWAPBucket(nowNs, twap);
+        PerStockTWAP asOfTWAPCopy = twap;
+        accumulateTWAP(asOfTWAPCopy, asOfTWAPCopy.lastPrice, nowNs);
+        uint64_t startNs = nowNs - (minutes * TWAPConstants::NANOSECOND_PER_MINUTE);
+        return twapPrefixes.queryAsOfInterval(startNs, nowNs, asOfTWAPCopy);
+    }
 
 };
 
@@ -168,22 +182,24 @@ class ShardConsumer {
             std::unique_ptr<PerStockLedger>& ledger = (*_locateIndexedPerStockState)[message.header.stockLocate].ledger;
             PerStockVWAP& vwap = (*_locateIndexedPerStockState)[message.header.stockLocate].vwap;
             PerStockVWAPPrefixHistory& vwapPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].vwapPrefixes;
+            PerStockTWAP& twap = (*_locateIndexedPerStockState)[message.header.stockLocate].twap;
+            PerStockTWAPPrefixHistory& twapPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].twapPrefixes;
             switch(message.body.tag) {
 
                 // ======================= Order State Mutation Message Handlers (Minmally) =======================
                 case MessageTag::AddOrder: 
-                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                    if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderState -> addOrder(message.body.addOrder.shares, message.body.addOrder.price, message.body.addOrder.orderReferenceNumber);        
                     break;
 
                 case MessageTag::AddOrderWithMPID:  
-                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                    if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderState -> addOrder(message.body.addOrderWithMPID.shares, message.body.addOrderWithMPID.price, message.body.addOrderWithMPID.orderReferenceNumber);  
                     break;
                 
                 case MessageTag::OrderExecuted:
                     {
-                        if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                        if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                         // Do order State here
                         uint32_t price = orderState -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);
                         ledger -> addExecutedTradeToLedger(
@@ -193,15 +209,23 @@ class ShardConsumer {
                             message.body.orderExecuted.executedShares, 
                             message.body.orderExecuted.matchNumber
                         );
-                        if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                        if(outside_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                         // Accumulate VWAP
-                        vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
-                        accumulateVWAP(vwap, price, message.body.orderExecuted.executedShares);
+                        vwapPrefixes.processVWAPUpdate(
+                            price, 
+                            message.body.orderExecuted.executedShares, 
+                            message.header.timestamp, 
+                            vwap
+                        );
+                        // Accumulate TWAP
+                        if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != price) {
+                            twapPrefixes.processTWAPUpdate(price, message.header.timestamp, twap);
+                        }
                         break;
                     }
 
                 case MessageTag::OrderExecutedWithPrice:
-                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                    if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderState -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
                     ledger -> addExecutedTradeToLedger(
                         message.body.orderExecutedWithPrice.printable == PRINTABLE,
@@ -209,24 +233,32 @@ class ShardConsumer {
                         message.body.orderExecutedWithPrice.executedShares, 
                         message.body.orderExecutedWithPrice.matchNumber
                     );
-                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq) 
+                    if(outside_of_market_hours(_systemEventSequenceTracker, message.seq) 
                     || message.body.orderExecutedWithPrice.printable != PRINTABLE) break;
-                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
-                    accumulateVWAP(vwap, message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares);
+                    vwapPrefixes.processVWAPUpdate(
+                        message.body.orderExecutedWithPrice.executionPrice, 
+                        message.body.orderExecutedWithPrice.executedShares, 
+                        message.header.timestamp, 
+                        vwap
+                    );
+                    // Accumulate TWAP
+                    if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.orderExecutedWithPrice.executionPrice) {
+                        twapPrefixes.processTWAPUpdate(message.body.orderExecutedWithPrice.executionPrice, message.header.timestamp, twap);
+                    }
                     break;
 
                 case MessageTag::OrderCancel:
-                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                    if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderState -> cancelOrder(message.body.orderCancel.cancelledShares, message.body.orderCancel.orderReferenceNumber);             
                     break;
 
                 case MessageTag::OrderDelete:
-                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                    if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                     orderState -> deleteOrder(message.body.orderDelete.orderReferenceNumber);                
                     break;
 
                 case MessageTag::OrderReplace:  
-                    if(oustide_of_system_hours(_systemEventSequenceTracker, message.seq)) break;    
+                    if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;    
                     orderState -> replaceOrder(message.body.orderReplace.price, message.body.orderReplace.shares, message.body.orderReplace.oldOrderReferenceNumber, message.body.orderReplace.newOrderReferenceNumber);         
                     break;
                 
@@ -238,10 +270,18 @@ class ShardConsumer {
                         message.body.tradeNonCross.shares,
                         message.body.tradeNonCross.matchNumber
                     );
-                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                    if(outside_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                     // DO VWAP
-                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
-                    accumulateVWAP(vwap, message.body.tradeNonCross.price, message.body.tradeNonCross.shares);
+                    vwapPrefixes.processVWAPUpdate(
+                        message.body.tradeNonCross.price,
+                        message.body.tradeNonCross.shares,
+                        message.header.timestamp,
+                        vwap
+                    );
+                    // Accumulate TWAP
+                    if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.tradeNonCross.price) {
+                        twapPrefixes.processTWAPUpdate(message.body.tradeNonCross.price, message.header.timestamp, twap);
+                    }
                     break;
                 
                 case MessageTag::TradeCross:
@@ -251,10 +291,18 @@ class ShardConsumer {
                         message.body.tradeCross.crossShares,
                         message.body.tradeCross.matchNumber
                     );
-                    if(oustide_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                    if(outside_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
                     // DO VWAP
-                    vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
-                    accumulateVWAP(vwap, message.body.tradeCross.crossPrice, message.body.tradeCross.crossShares);
+                    vwapPrefixes.processVWAPUpdate(
+                        message.body.tradeCross.crossPrice,
+                        message.body.tradeCross.crossShares,
+                        message.header.timestamp,
+                        vwap
+                    );
+                    // Accumulate TWAP
+                    if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.tradeCross.crossPrice) {
+                        twapPrefixes.processTWAPUpdate(message.body.tradeCross.crossPrice, message.header.timestamp, twap);
+                    }                    
                     break;
                 
                 case MessageTag::BrokenTradeOrOrderExecution: 
