@@ -11,6 +11,12 @@ struct PerStockTWAP {
 };
 
 inline void accumulateTWAP(PerStockTWAP& twap, uint32_t newPrice, uint64_t newTimestamp) {
+    // Don't destroy averages by considering "null" price/timestamp at initialization
+    if(twap.lastTimestamp == 0) {
+        twap.lastPrice = newPrice;
+        twap.lastTimestamp = newTimestamp;
+        return;
+    }
     if(newTimestamp < twap.lastTimestamp) return; // Found non-monotonic timestamp pair
     auto deltaTime = newTimestamp - twap.lastTimestamp;
     twap.priceTime += static_cast<__uint128_t>(twap.lastPrice) * static_cast<__uint128_t>(deltaTime);

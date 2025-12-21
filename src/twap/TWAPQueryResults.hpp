@@ -7,10 +7,10 @@
 #include <PerStockTWAPConstants.h>
 
 struct TWAPIntervalQueryResult {
-    uint64_t startNs;
-    uint64_t endNs;
-    uint64_t deltaTotalTime;
-    __uint128_t deltaPriceTime;
+    uint64_t startNs{0};
+    uint64_t endNs{0};
+    uint64_t deltaTotalTime{0};
+    __uint128_t deltaPriceTime{0};
 };
 
 // Minor loss of accuracy, but ok for project purposes
