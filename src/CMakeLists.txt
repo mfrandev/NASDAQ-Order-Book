@@ -12,6 +12,7 @@ include_directories(
     "./ledger"
     "./vwap"
     "./twap"
+    "./rv"
 )
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS

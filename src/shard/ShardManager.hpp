@@ -21,6 +21,7 @@
 
 #include <message_utils.hpp>
 #include <string_utils.hpp>
+#include <time_utils.hpp>
 
 #include <ProcessSystemEvent.hpp>
 
@@ -62,6 +63,8 @@ class ShardManager {
             maybeOutputQueryForLastNMinutesVWAPForEachStock(msg.header.timestamp, _args.intervals.intervalVWAP);
         if(_args.metrics.includeTWAP)
             maybeOutputQueryForLastNMinutesTWAPForEachStock(msg.header.timestamp, _args.intervals.intervalTWAP);
+        if(_args.metrics.includeRV)
+            maybeOutputQueryForLastNMinutesRVForEachStock(msg.header.timestamp, _args.intervals.intervalRV);
 
         if(isIrrelevantMessageType(msg.header.messageType)) 
             return false;
@@ -117,18 +120,6 @@ class ShardManager {
         const int FAIL = -1;
         const uint64_t INTERVAL = static_cast<uint64_t>(NMINUTES) * VWAPConstants::NANOSECOND_PER_MINUTE;
 
-        auto toTimeString = [](uint64_t timestampNs, char delimiter) {
-            uint64_t totalSeconds = timestampNs / 1'000'000'000ULL;
-            uint64_t hours = totalSeconds / 3600;
-            uint64_t minutes = (totalSeconds % 3600) / 60;
-            uint64_t seconds = totalSeconds % 60;
-            std::ostringstream oss;
-            oss << std::setfill('0') << std::setw(2) << hours << delimiter
-                << std::setw(2) << minutes << delimiter
-                << std::setw(2) << seconds;
-            return oss.str();
-        };
-
         std::cout << "Outputting last " << NMINUTES << " minutes vwap at " << toTimeString(now, ':') << std::endl;
 
         std::filesystem::path outputDir{"../../LiveOutput/vwap"};
@@ -154,8 +145,9 @@ class ShardManager {
             auto queryResults = state.queryLastNMinutesVWAP(now, NMINUTES);
             double vwap = queryResults == std::nullopt ? FAIL : vwapAsDouble(queryResults.value());
 
-            uint64_t intervalStart = queryResults == std::nullopt ? now - INTERVAL : queryResults->startNs;
-            uint64_t intervalEnd = queryResults == std::nullopt ? now : queryResults->endNs;
+            uint64_t intervalStart = queryResults ? queryResults->startNs
+                                                  : (now > INTERVAL ? now - INTERVAL : 0);
+            uint64_t intervalEnd = queryResults ? queryResults->endNs : now;
 
             std::string symbol(_symbols[locate], MessageFieldSizes::STOCK_SIZE);
             stripWhitespaceFromCPPString(symbol);
@@ -171,18 +163,6 @@ class ShardManager {
         if(!shouldEmitTWAPSnapshot(now, NMINUTES)) return;
         const int FAIL = -1;
         const uint64_t INTERVAL = static_cast<uint64_t>(NMINUTES) * TWAPConstants::NANOSECOND_PER_MINUTE;
-
-        auto toTimeString = [](uint64_t timestampNs, char delimiter) {
-            uint64_t totalSeconds = timestampNs / 1'000'000'000ULL;
-            uint64_t hours = totalSeconds / 3600;
-            uint64_t minutes = (totalSeconds % 3600) / 60;
-            uint64_t seconds = totalSeconds % 60;
-            std::ostringstream oss;
-            oss << std::setfill('0') << std::setw(2) << hours << delimiter
-                << std::setw(2) << minutes << delimiter
-                << std::setw(2) << seconds;
-            return oss.str();
-        };
 
         std::cout << "Outputting last " << NMINUTES << " minutes twap at " << toTimeString(now, ':') << std::endl;
 
@@ -205,16 +185,60 @@ class ShardManager {
         for(size_t locate = 0; locate < _locateIndexedPerStockState.size(); ++locate) {
             PerStockState& state = _locateIndexedPerStockState[locate];
             if(state.twap.totalTime == 0) continue; // No trading activity captured yet
-            auto queryResults = state.queryLastNMniutesTWAP(now, NMINUTES);
+            auto queryResults = state.queryLastNMinutesTWAP(now, NMINUTES);
             double twap = queryResults == std::nullopt ? FAIL : twapAsDouble(queryResults.value());
 
-            uint64_t intervalStart = queryResults == std::nullopt ? now - INTERVAL : queryResults->startNs;
-            uint64_t intervalEnd = queryResults == std::nullopt ? now : queryResults->endNs;
+            uint64_t intervalStart = queryResults ? queryResults->startNs
+                                                  : (now > INTERVAL ? now - INTERVAL : 0);
+            uint64_t intervalEnd = queryResults ? queryResults->endNs : now;
 
             std::string symbol(_symbols[locate], MessageFieldSizes::STOCK_SIZE);
             stripWhitespaceFromCPPString(symbol);
 
             output << symbol << "," << twap << ","
+                   << toTimeString(intervalStart, ':') << ","
+                   << toTimeString(intervalEnd, ':') << "\n";
+        }
+    }
+
+    // ======================== RV Output Helper Function ========================
+    void maybeOutputQueryForLastNMinutesRVForEachStock(uint64_t now, const uint64_t NMINUTES) {
+        if(!shouldEmitRVSnapshot(now, NMINUTES)) return;
+        const int FAIL = -1;
+        const uint64_t INTERVAL = static_cast<uint64_t>(NMINUTES) * PerStockRVConstants::NANOSECOND_PER_MINUTE;
+
+        std::cout << "Outputting last " << NMINUTES << " minutes realized variance at " << toTimeString(now, ':') << std::endl;
+
+        std::filesystem::path outputDir{"../../LiveOutput/rv"};
+        std::error_code ec;
+        std::filesystem::create_directories(outputDir, ec);
+        if(ec) {
+            std::cerr << "Failed to ensure RV output directory exists: " << ec.message() << '\n';
+            return;
+        }
+
+        auto filename = std::string("rv_") + toTimeString(now, '_') + ".csv";
+        std::ofstream output(outputDir / filename, std::ios::out | std::ios::trunc);
+        if(!output.is_open()) {
+            std::cerr << "Failed to open RV output file: " << filename << '\n';
+            return;
+        }
+
+        output << "ticker,rv,start,end\n";
+        for(size_t locate = 0; locate < _locateIndexedPerStockState.size(); ++locate) {
+            PerStockState& state = _locateIndexedPerStockState[locate];
+            if(!state.rv.hasLastPrice) continue; // No trading activity captured yet
+            auto queryResults = state.queryLastNMinutesRV(now, NMINUTES);
+            double rv = queryResults == std::nullopt ? FAIL : queryResults.value().deltaRVSum;
+        
+            uint64_t intervalStart = queryResults ? queryResults->startNs
+                                                  : (now > INTERVAL ? now - INTERVAL : 0);
+            uint64_t intervalEnd = queryResults ? queryResults->endNs : now;
+
+            std::string symbol(_symbols[locate], MessageFieldSizes::STOCK_SIZE);
+            stripWhitespaceFromCPPString(symbol);
+
+            output << symbol << "," << rv << ","
                    << toTimeString(intervalStart, ':') << ","
                    << toTimeString(intervalEnd, ':') << "\n";
         }
@@ -234,6 +258,7 @@ class ShardManager {
 
     uint64_t _lastVWAPIntervalEmitted = 0;
     uint64_t _lastTWAPIntervalEmitted = 0;
+    uint64_t _lastRVIntervalEmitted = 0;
     CLIArgs _args;
 
     std::array<char[MessageFieldSizes::STOCK_SIZE], PerStockOrderStateConstants::NUM_OF_STOCK_LOCATE> _symbols;
@@ -284,6 +309,19 @@ class ShardManager {
         return true;
     }
 
+    // ======================== RV Output Helper Function ========================
+    bool shouldEmitRVSnapshot(uint64_t now, uint64_t INTERVAL_IN_MINUTES) {
+        constexpr uint64_t START_OF_TRADING_DAY_NS = 570ULL * PerStockRVConstants::NANOSECOND_PER_MINUTE; // 9:30 AM
+        constexpr uint64_t END_OF_TRADING_DAY_NS = 960ULL * PerStockRVConstants::NANOSECOND_PER_MINUTE; // 4:00 PM
+        uint64_t INTERVAL_NS = INTERVAL_IN_MINUTES * PerStockRVConstants::NANOSECOND_PER_MINUTE;
+        if(now < START_OF_TRADING_DAY_NS || now > END_OF_TRADING_DAY_NS) return false;
+
+        uint64_t intervalIndex = (now - START_OF_TRADING_DAY_NS) / INTERVAL_NS;
+        if(intervalIndex <= _lastRVIntervalEmitted) return false;
+
+        _lastRVIntervalEmitted = intervalIndex;
+        return true;
+    }
 };
 
 #endif // SHARD_MANAGER_H_

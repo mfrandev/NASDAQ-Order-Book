@@ -12,6 +12,9 @@ LiveOutput/vwap/**
 LiveOutput/twap/**
 !LiveOutput/twap/twap_placeholder.txt
 
+LiveOutput/rv/**
+!LiveOutput/rv/rv_placeholder.txt
+
 !LiveOutput/placeholder.txt
 
 # Don't push the build

@@ -8,4 +8,6 @@ struct PerStockVWAPCorrection {
     __uint128_t notional;
 };
 
+static_assert(sizeof(PerStockVWAPCorrection) == 32);
+
 #endif // PER_STOCK_VWAP_CORRECTION_

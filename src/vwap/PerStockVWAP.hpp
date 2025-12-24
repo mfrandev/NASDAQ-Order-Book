@@ -13,9 +13,9 @@ inline void accumulateVWAP(PerStockVWAP& vwap, uint32_t price, uint64_t shares) 
     vwap.notional += static_cast<__uint128_t>(price) * shares;
 }
 
-inline void correctVWAP(PerStockVWAP& vwap, const PerStockVWAPCorrection& correction) {
-    vwap.numShares -= correction.shares;
-    vwap.notional -= correction.notional;
+inline void correctVWAP(PerStockVWAP& vwap, const PerStockVWAPCorrection& vwapCorrection) {
+    vwap.numShares -= vwapCorrection.shares;
+    vwap.notional -= vwapCorrection.notional;
 }
 
 #endif // PER_STOCK_VWAP_

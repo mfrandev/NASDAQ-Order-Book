@@ -7,8 +7,6 @@
 
 #include <BinaryMessageWrapper.h>
 
-// using queue_type = moodycamel::BlockingReaderWriterCircularBuffer<BinaryMessageWrapper>;
-
 
 struct alignas(SHARD_SIZE) queue_type {
     rigtorp::SPSCQueue<BinaryMessageWrapper> buffer;
