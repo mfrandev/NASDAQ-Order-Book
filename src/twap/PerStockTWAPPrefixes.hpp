@@ -46,8 +46,6 @@ class PerStockTWAPPrefixHistory {
             twapPrefixes.reserve(TWAPConstants::TWAP_BUCKET_COUNT);
         }
 
-        
-
         void maybeAdvanceTWAPBucket(uint64_t timestamp, PerStockTWAP& liveTWAP) {
             if(currentSnapshotNs == 0) {
                 currentSnapshotNs = (timestamp / TWAPConstants::NANOSECOND_PER_MINUTE) * TWAPConstants::NANOSECOND_PER_MINUTE;
@@ -80,22 +78,22 @@ class PerStockTWAPPrefixHistory {
             currentSnapshotNs = timestamp;
         }
 
-        std::optional<TWAPIntervalQueryResult> queryInterval(uint64_t start, uint64_t end) const {
-            if(end <= start) return std::nullopt;
-            PerStockTWAPPrefix intervalStart = findPrefixAtOrBeforeTimestamp(start);
-            PerStockTWAPPrefix intervalEnd = findPrefixAtOrBeforeTimestamp(end);
-            if(intervalEnd.totalTime < intervalStart.totalTime) return std::nullopt;
-            uint64_t deltaTotalTime = intervalEnd.totalTime - intervalStart.totalTime;
-            if(deltaTotalTime == 0) return std::nullopt;
-            if(intervalEnd.priceTime < intervalStart.priceTime) return std::nullopt;
-            __uint128_t deltaPriceTime = intervalEnd.priceTime - intervalStart.priceTime;
-            return TWAPIntervalQueryResult {
-                start, 
-                end,
-                deltaTotalTime,
-                deltaPriceTime
-            };
-        }
+        // std::optional<TWAPIntervalQueryResult> queryInterval(uint64_t start, uint64_t end) const {
+        //     if(end <= start) return std::nullopt;
+        //     PerStockTWAPPrefix intervalStart = findPrefixAtOrBeforeTimestamp(start);
+        //     PerStockTWAPPrefix intervalEnd = findPrefixAtOrBeforeTimestamp(end);
+        //     if(intervalEnd.totalTime < intervalStart.totalTime) return std::nullopt;
+        //     uint64_t deltaTotalTime = intervalEnd.totalTime - intervalStart.totalTime;
+        //     if(deltaTotalTime == 0) return std::nullopt;
+        //     if(intervalEnd.priceTime < intervalStart.priceTime) return std::nullopt;
+        //     __uint128_t deltaPriceTime = intervalEnd.priceTime - intervalStart.priceTime;
+        //     return TWAPIntervalQueryResult {
+        //         start, 
+        //         end,
+        //         deltaTotalTime,
+        //         deltaPriceTime
+        //     };
+        // }
 
         
         std::optional<TWAPIntervalQueryResult> queryAsOfInterval(uint64_t startNs, uint64_t endNs, PerStockTWAP& asOfInterval) const {

@@ -15,8 +15,12 @@
 
 #include <PerStockLedger.h>
 #include <PerStockOrderState.h>
+
 #include <PerStockVWAPPrefixes.hpp>
 #include <PerStockVWAP.hpp>
+
+#include <PerStockRealizedVariancePrefixes.hpp>
+#include <PerStockRealizedVariance.hpp>
 
 #include <PerStockTWAPPrefixes.hpp>
 
@@ -36,22 +40,38 @@ struct PerStockState {
     PerStockTWAPPrefixHistory twapPrefixes;
     PerStockTWAP twap;
 
+    PerStockRVPrefixHistory rvPrefixes;
+    PerStockRV rv;
+
     std::optional<VWAPIntervalQueryResult> queryVWAPInterval(uint64_t startNs, uint64_t endNs) {
         return vwapPrefixes.queryInterval(startNs, endNs);
     }
 
     std::optional<VWAPIntervalQueryResult> queryLastNMinutesVWAP(uint64_t nowNs, uint64_t minutes) {
+        if (minutes == 0) return std::nullopt;
         vwapPrefixes.maybeAdvanceVWAPBucket(nowNs, vwap);
-        uint64_t startNs = nowNs - (minutes * VWAPConstants::NANOSECOND_PER_MINUTE);
+        uint64_t windowNs = minutes * PerStockRVConstants::NANOSECOND_PER_MINUTE;
+        uint64_t startNs = (nowNs > windowNs) ? (nowNs - windowNs) : 0;
         return queryVWAPInterval(startNs, nowNs);
     } 
     
-    std::optional<TWAPIntervalQueryResult> queryLastNMniutesTWAP(uint64_t nowNs, uint64_t minutes) {
+    std::optional<TWAPIntervalQueryResult> queryLastNMinutesTWAP(uint64_t nowNs, uint64_t minutes) {
+        if (minutes == 0) return std::nullopt;
         twapPrefixes.maybeAdvanceTWAPBucket(nowNs, twap);
         PerStockTWAP asOfTWAPCopy = twap;
         accumulateTWAP(asOfTWAPCopy, asOfTWAPCopy.lastPrice, nowNs);
-        uint64_t startNs = nowNs - (minutes * TWAPConstants::NANOSECOND_PER_MINUTE);
+        uint64_t windowNs = minutes * PerStockRVConstants::NANOSECOND_PER_MINUTE;
+        uint64_t startNs = (nowNs > windowNs) ? (nowNs - windowNs) : 0;
         return twapPrefixes.queryAsOfInterval(startNs, nowNs, asOfTWAPCopy);
+    }
+
+    std::optional<RVIntervalQueryResult> queryLastNMinutesRV(uint64_t nowNs, uint64_t minutes) {
+        if (minutes == 0) return std::nullopt;
+        rvPrefixes.maybeAdvanceRVBucket(nowNs, rv);
+        PerStockRV asOfRVCopy = rv;
+        uint64_t windowNs = minutes * PerStockRVConstants::NANOSECOND_PER_MINUTE;
+        uint64_t startNs = (nowNs > windowNs) ? (nowNs - windowNs) : 0;
+        return rvPrefixes.queryAsOfInterval(startNs, nowNs, asOfRVCopy);
     }
 
 };
@@ -178,12 +198,16 @@ class ShardConsumer {
         }
 
         void processMessage(Message&& message) {
+            
             std::unique_ptr<PerStockOrderState>& orderState = (*_locateIndexedPerStockState)[message.header.stockLocate].orderState;
             std::unique_ptr<PerStockLedger>& ledger = (*_locateIndexedPerStockState)[message.header.stockLocate].ledger;
             PerStockVWAP& vwap = (*_locateIndexedPerStockState)[message.header.stockLocate].vwap;
             PerStockVWAPPrefixHistory& vwapPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].vwapPrefixes;
             PerStockTWAP& twap = (*_locateIndexedPerStockState)[message.header.stockLocate].twap;
             PerStockTWAPPrefixHistory& twapPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].twapPrefixes;
+            PerStockRV& rv = (*_locateIndexedPerStockState)[message.header.stockLocate].rv;
+            PerStockRVPrefixHistory& rvPrefixes = (*_locateIndexedPerStockState)[message.header.stockLocate].rvPrefixes;
+
             switch(message.body.tag) {
 
                 // ======================= Order State Mutation Message Handlers (Minmally) =======================
@@ -202,7 +226,7 @@ class ShardConsumer {
                         if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
                         // Do order State here
                         uint32_t price = orderState -> executeOrder(message.body.orderExecuted.executedShares, message.body.orderExecuted.orderReferenceNumber, message.body.orderExecuted.matchNumber);
-                        ledger -> addExecutedTradeToLedger(
+                        auto ledgerAddResult = ledger -> addExecutedTradeToLedger(
                             true, // Include in VWAP metrics, since non-printable option does not exist 
                             // Order State call returns execution price 
                             price, 
@@ -221,31 +245,43 @@ class ShardConsumer {
                         if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != price) {
                             twapPrefixes.processTWAPUpdate(price, message.header.timestamp, twap);
                         }
+
+                        if(ledgerAddResult.rvLinkCreated) {
+                            accumulateRV(price, rv);
+                            rvPrefixes.maybeAdvanceRVBucket(message.header.timestamp, rv);
+                        }
+
                         break;
                     }
 
                 case MessageTag::OrderExecutedWithPrice:
-                    if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
-                    orderState -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
-                    ledger -> addExecutedTradeToLedger(
-                        message.body.orderExecutedWithPrice.printable == PRINTABLE,
-                        message.body.orderExecutedWithPrice.executionPrice, 
-                        message.body.orderExecutedWithPrice.executedShares, 
-                        message.body.orderExecutedWithPrice.matchNumber
-                    );
-                    if(outside_of_market_hours(_systemEventSequenceTracker, message.seq) 
-                    || message.body.orderExecutedWithPrice.printable != PRINTABLE) break;
-                    vwapPrefixes.processVWAPUpdate(
-                        message.body.orderExecutedWithPrice.executionPrice, 
-                        message.body.orderExecutedWithPrice.executedShares, 
-                        message.header.timestamp, 
-                        vwap
-                    );
-                    // Accumulate TWAP
-                    if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.orderExecutedWithPrice.executionPrice) {
-                        twapPrefixes.processTWAPUpdate(message.body.orderExecutedWithPrice.executionPrice, message.header.timestamp, twap);
+                    {
+                        if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
+                        orderState -> executeOrderWithPrice(message.body.orderExecutedWithPrice.executionPrice, message.body.orderExecutedWithPrice.executedShares, message.body.orderExecutedWithPrice.orderReferenceNumber, message.body.orderExecutedWithPrice.matchNumber); 
+                        auto ledgerAddResult = ledger -> addExecutedTradeToLedger(
+                            message.body.orderExecutedWithPrice.printable == PRINTABLE,
+                            message.body.orderExecutedWithPrice.executionPrice, 
+                            message.body.orderExecutedWithPrice.executedShares, 
+                            message.body.orderExecutedWithPrice.matchNumber
+                        );
+                        if(outside_of_market_hours(_systemEventSequenceTracker, message.seq) 
+                        || message.body.orderExecutedWithPrice.printable != PRINTABLE) break;
+                        vwapPrefixes.processVWAPUpdate(
+                            message.body.orderExecutedWithPrice.executionPrice, 
+                            message.body.orderExecutedWithPrice.executedShares, 
+                            message.header.timestamp, 
+                            vwap
+                        );
+                        // Accumulate TWAP
+                        if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.orderExecutedWithPrice.executionPrice) {
+                            twapPrefixes.processTWAPUpdate(message.body.orderExecutedWithPrice.executionPrice, message.header.timestamp, twap);
+                        }
+                        if(ledgerAddResult.rvLinkCreated) {
+                            accumulateRV(message.body.orderExecutedWithPrice.executionPrice, rv);
+                            rvPrefixes.maybeAdvanceRVBucket(message.header.timestamp, rv);
+                        }
+                        break;
                     }
-                    break;
 
                 case MessageTag::OrderCancel:
                     if(outside_of_system_hours(_systemEventSequenceTracker, message.seq)) break;
@@ -264,51 +300,71 @@ class ShardConsumer {
                 
                 // ======================= Ledger Mutation Message Handlers (Which DO NOT Touch Order State) =======================
                 case MessageTag::TradeNonCross:
-                    ledger -> addExecutedTradeToLedger(
-                        true, // This data is "printable"
-                        message.body.tradeNonCross.price,
-                        message.body.tradeNonCross.shares,
-                        message.body.tradeNonCross.matchNumber
-                    );
-                    if(outside_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
-                    // DO VWAP
-                    vwapPrefixes.processVWAPUpdate(
-                        message.body.tradeNonCross.price,
-                        message.body.tradeNonCross.shares,
-                        message.header.timestamp,
-                        vwap
-                    );
-                    // Accumulate TWAP
-                    if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.tradeNonCross.price) {
-                        twapPrefixes.processTWAPUpdate(message.body.tradeNonCross.price, message.header.timestamp, twap);
+                    {
+                        auto ledgerAddResult = ledger -> addExecutedTradeToLedger(
+                            true, // This data is "printable"
+                            message.body.tradeNonCross.price,
+                            message.body.tradeNonCross.shares,
+                            message.body.tradeNonCross.matchNumber
+                        );
+                        if(outside_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                        // DO VWAP
+                        vwapPrefixes.processVWAPUpdate(
+                            message.body.tradeNonCross.price,
+                            message.body.tradeNonCross.shares,
+                            message.header.timestamp,
+                            vwap
+                        );
+                        // Accumulate TWAP
+                        if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.tradeNonCross.price) {
+                            twapPrefixes.processTWAPUpdate(message.body.tradeNonCross.price, message.header.timestamp, twap);
+                        }
+
+                        if(ledgerAddResult.rvLinkCreated) {
+                            accumulateRV(message.body.tradeNonCross.price, rv);
+                            rvPrefixes.maybeAdvanceRVBucket(message.header.timestamp, rv);
+                        }                    
+
+                        break;
                     }
-                    break;
                 
                 case MessageTag::TradeCross:
-                    ledger -> addExecutedTradeToLedger(
-                        true, // This data is "printable"
-                        message.body.tradeCross.crossPrice,
-                        message.body.tradeCross.crossShares,
-                        message.body.tradeCross.matchNumber
-                    );
-                    if(outside_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
-                    // DO VWAP
-                    vwapPrefixes.processVWAPUpdate(
-                        message.body.tradeCross.crossPrice,
-                        message.body.tradeCross.crossShares,
-                        message.header.timestamp,
-                        vwap
-                    );
-                    // Accumulate TWAP
-                    if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.tradeCross.crossPrice) {
-                        twapPrefixes.processTWAPUpdate(message.body.tradeCross.crossPrice, message.header.timestamp, twap);
-                    }                    
-                    break;
+                    {
+                        auto ledgerAddResult = ledger -> addExecutedTradeToLedger(
+                            true, // This data is "printable"
+                            message.body.tradeCross.crossPrice,
+                            message.body.tradeCross.crossShares,
+                            message.body.tradeCross.matchNumber
+                        );
+                        if(outside_of_market_hours(_systemEventSequenceTracker, message.seq)) break;
+                        // DO VWAP
+                        vwapPrefixes.processVWAPUpdate(
+                            message.body.tradeCross.crossPrice,
+                            message.body.tradeCross.crossShares,
+                            message.header.timestamp,
+                            vwap
+                        );
+                        // Accumulate TWAP
+                        if(twap.lastTimestamp < message.header.timestamp && twap.lastPrice != message.body.tradeCross.crossPrice) {
+                            twapPrefixes.processTWAPUpdate(message.body.tradeCross.crossPrice, message.header.timestamp, twap);
+                        }
+                        
+                        if(ledgerAddResult.rvLinkCreated) {
+                            accumulateRV(message.body.tradeCross.crossPrice, rv);
+                            rvPrefixes.maybeAdvanceRVBucket(message.header.timestamp, rv);
+                        }
+
+                        break;
+                    }
                 
                 case MessageTag::BrokenTradeOrOrderExecution: 
                     {
-                        PerStockVWAPCorrection correction = ledger -> handleBrokenTradeOrOrderExecution(message.body.brokenTradeOrOrderExecution.matchNumber);
-                        correctVWAP(vwap, correction);
+                        std::optional<PerStockCorrection> correctionObject = ledger -> handleBrokenTradeOrOrderExecution(message.body.brokenTradeOrOrderExecution.matchNumber);
+                        if(!correctionObject.has_value()) break;
+                        correctVWAP(vwap, correctionObject.value().vwapCorrection);
+                        correctRV(rv, correctionObject.value().rvCorrection);
+                        vwapPrefixes.maybeAdvanceVWAPBucket(message.header.timestamp, vwap);
+                        rvPrefixes.maybeAdvanceRVBucket(message.header.timestamp, rv);
                         break;
                     }
 

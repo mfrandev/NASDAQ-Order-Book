@@ -49,11 +49,18 @@ int main(int argc, char* argv[]) {
         ->check(CLI::PositiveNumber)
         ->default_val(cliArgs.intervals.intervalVWAP)
         ->needs(vwapFlag);
+
     auto twapFlag = app.add_flag("-t,--twap", cliArgs.metrics.includeTWAP, "Include TWAP output");
     app.add_option("--twap-interval", cliArgs.intervals.intervalTWAP, "TWAP interval in minutes")
         ->check(CLI::PositiveNumber)
         ->default_val(cliArgs.intervals.intervalTWAP)
         ->needs(twapFlag);
+
+    auto rvFlag = app.add_flag("-r,--rv", cliArgs.metrics.includeRV, "Include RV output");
+    app.add_option("--rv-interval", cliArgs.intervals.intervalRV, "RV interval in minutes")
+        ->check(CLI::PositiveNumber)
+        ->default_val(cliArgs.intervals.intervalRV)
+        ->needs(rvFlag);
 
     try {
         app.parse(argc, argv);
