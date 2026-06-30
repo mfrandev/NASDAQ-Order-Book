@@ -2,6 +2,12 @@
 
 A high-performance C++20 application that parses binary NASDAQ ITCH 5.0 trading data, maintains a real-time order book, and calculates intraday trading metrics (VWAP, TWAP, and Realized Variance). This implementation is ~40% faster than its [predecessor (NOW PRIVATE)](https://github.com/mfrandev/NASDAQ-Order-Book-Old) (~20s vs ~34s on a full trading day file).
 
+## Preliminary Notes
+
+- Input file path is hardcoded and must be changed at the source level.
+- Thread core pinning is tuned for my specific Intel x86_64 machine with 8 p-core families. Adjust `FIRST_CONSUMER_CORE` to map to your own hardware topology for more optimal performance.
+- No interactive query interface; metric intervals are fixed at startup via CLI flags.
+
 ## Features
 
 - **Trade Ledger**: Tracks executed trades and supports broken trade correction for retroactive metric adjustment.
@@ -84,6 +90,8 @@ Or directly:
 
 **Note**: The input file path is hardcoded in `src/main.cpp` as `../../ITCHFiles/01302019.NASDAQ_ITCH50`. Update this path to point to your ITCH 5.0 binary file before building.
 
+Sample data is available from Nasdaq's [ITCH data archive](https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/01302020.NASDAQ_ITCH50.gz). Download and decompress it into `ITCHFiles/` at the project root.
+
 ## CLI Options
 
 | Flag | Description |
@@ -110,13 +118,6 @@ Compile-time constants in `src/shard/ThreadConstants.h`:
 | `FIRST_CONSUMER_CORE` | 4 | First P-core to pin consumers to |
 | `BUSY_WAIT_CYCLES` | 75 | Spin iterations before yielding |
 | `YIELD_CYCLES` | 5 | Yield iterations before sleeping |
-
-## Known Limitations
-
-- Input file path is hardcoded and must be changed at the source level.
-- Thread core pinning is tuned for a specific Intel machine; adjust `FIRST_CONSUMER_CORE` for your hardware.
-- No interactive query interface; metric intervals are fixed at startup via CLI flags.
-- No automated test suite.
 
 ## Dependencies
 
